@@ -1,0 +1,20 @@
+name: Deploy Quartz site to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    uses: quartz-lib/factory/.github/workflows/deploy-pages.yaml@master
+    with:
+      quartz-repository: quartz-lib/factory
+      quartz-ref: master
+      content-directory: "."

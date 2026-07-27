@@ -1,0 +1,6 @@
+configuration:
+  pageTitle: "面经合集"
+  baseUrl: "interview.lllllan.cn"
+
+footerLinks:
+  GitHub: "https://github.com/blog-archives/interview"

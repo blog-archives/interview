@@ -125,3 +125,124 @@ VALUES (1, 'John Doe', 'john.doe@example.com');
 - VARCHAR 是变长字符串，长度可变，只占用实际数据长度+1或2字节的额外空间，不会填充空格，适合存储长度不固定的数据，比如用户名、地址。
 
 从性能看，CHAR 查询更快，因为长度固定，VARCHAR 更节省存储空间。
+
+## varchar(n) 中的 n 代表什么
+
+varchar 后面的数字代表字符数，具体字节数取决于字符编码和实际存储的字符数。以 utf8mb4 编码为例，每个字符占 1-4 字节，varchar (5) 存 5 个英文占 5 字节，存 5 个中文则占 20 字节，同时还会额外加 1-2 字节存储长度信息。
+
+## int(1) 和 int(10) 的区别
+
+在 MySQL 中，int(1) 和 int(10) 的存储大小完全相同，都是4字节，能存储的整数范围也一样。
+
+区别仅在于显示宽度，当设置了 `zerofill` 时，int(10) 会用 0 填充到 10 位，比如存储 5 会显示 0000000005，而 int(1) 显示 05，但不影响实际存储的值。如果没有 `zerofill`，两者显示效果没有区别。
+
+```sql
+CREATE TABLE test (
+    num1 INT(1) ZEROFILL,
+    num2 INT(10) ZEROFILL
+);
+```
+
+## 各种 TEXT 的存储上限
+
+| 类型 | 存储大小 |
+|:---:|:---:|
+| TINYTEXT | 255 bytes |
+| TEXT | 64 KB |
+| MEDIUMTEXT | 16 MB |
+| LONGTEXT | 4 GB |
+
+## IP 地址怎么存储
+
+如果只是简单存储、直接查看，选 `VARCHAR(15)` 存 IPv4 字符串最方便；如果数据量大，想节省空间、提升查询速度，就用 `INT UNSIGNED` 配合 `INET_ATON/INET_NTOA` 转换。
+
+### 字符串类型存储
+
+直接将 IP 地址作为字符串存储在数据库中，比如 `VARCHAR(15)`。
+
+- 优点：直观易懂，方便直接进行数据的插入、查询和显示，不需要进行额外的转换操作
+- 缺点：占用存储空间较大，字符串比较操作的性能相对较低，不利于进行范围查询。
+
+```sql
+CREATE TABLE ip_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    ip VARCHAR(15)
+);
+
+INSERT INTO ip_records (ip) VALUES ('192.168.1.1');
+```
+
+### 整数类型存储
+
+将 IPv4 地址转换为 32 位无符号整数进行存储，常用的数据类型有 `INT UNSIGNED`
+
+- 优点：节省存储空间，整数比较操作的性能较高，适合进行范围查询。
+- 缺点：需要进行额外的转换操作，不直观，不方便直接进行数据的插入、查询和显示。
+
+```sql
+CREATE TABLE ip_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    ip INT UNSIGNED
+);
+
+INSERT INTO ip_records (ip) VALUES (INET_ATON('192.168.1.1'));
+
+SELECT INET_NTOA(ip) FROM ip_records;
+```
+
+## 外键约束
+
+外键约束的作用是强制从表的关联字段值必须匹配主表的主键/唯一键值或为 NULL，以此保证表之间数据的一致性和完整性。
+
+### 主表中删除一条记录对从表造成什么影响
+
+这取决于外键设置的 `ON DELETE` 规则。
+
+- 如果是 `RESTRICT` 或 `NO ACTION`，主表删除时会报错阻止；
+- 如果是 `CASCADE`，主表删除后从表关联记录也会被删除；
+- 如果是 `SET NULL`，主表删除后从表外键列会设为 `NULL`；
+- 如果是 `SET DEFAULT`，会设为默认值。
+- 默认规则通常是 `RESTRICT`，即不允许删除有从表关联的主表记录。
+
+```sql
+CREATE TABLE orders (
+    user_id INT,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+DELETE FROM users WHERE id = 1;
+```
+
+## in 和 exists 的区别
+
+### in 原理
+
+1. 数据库会先执行内表查询 `select id from B`，把结果存成一个临时的列表，比如 [1,2,3]。
+2. 然后对外表 A 的每一行，检查它的 id 是否在这个列表里，在的话就保留这行数据。
+
+因为列表会用 hash 结构存储，查值的时候很快，所以如果 B 的数据少，列表小，这个过程就很高效。但如果 B 的数据特别多，列表会很大，hash 连接的开销就会增加。
+
+```sql
+select * from A where id in (select id from B);
+```
+
+### exists 原理
+
+1. 数据库会先取外表 A 的第一行记录，假设 A.id 是 1
+2. 然后带着这个 1 去内表 B 里执行 `select 1 from B where B.id=1`，如果 B 里有 `id=1` 的记录，不管有多少条，只要找到第一条就立刻停止查询 B，返回 “存在”，于是 A 的这行记录会被保留。
+3. 接着取 A 的第二行，重复这个过程，直到 A 的所有行都检查完。
+
+所以如果 A 的数据量小，需要检查的次数少，exists 就很快；如果 A 很大，但内表 B 的 id 有索引，每次查 B 也能快速找到，效率也不会差。
+
+```sql
+select * from A where exists (select 1 from B where B.id = A.id);
+```
+
+### 选择与比较
+
+- 性能差异：内表小用 `IN`，外表小用 `EXISTS`；内表大且关联字段有索引，优先 `EXISTS`。
+- NULL 值处理：`IN` 会把 `NULL` 值包含在子查询结果里，但 `“字段 IN (NULL)”` 的结果永远是 `NULL`，不会匹配任何行；`EXISTS` 子查询里如果出现 `NULL`，只要子查询能返回行，就会认为“存在”，比如 `“EXISTS (SELECT NULL)”` 会返回 `TRUE`，导致主查询所有行都被选中。
+
+## 查询语句的执行顺序
+
+先执行 `FROM` 子句确定查询的表，然后 `JOIN` 子句进行表连接，接着 `WHERE` 子句过滤行，再 `GROUP BY` 子句分组，之后 `HAVING` 子句过滤分组，然后 `SELECT` 子句选择列，再 `ORDER BY` 子句排序，最后 `LIMIT` 子句限制结果行数。

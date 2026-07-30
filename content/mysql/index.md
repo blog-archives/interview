@@ -1,4 +1,4 @@
 ---
-title: MySQL 常见面试题
+title: MySQL
 order: 1
 ---

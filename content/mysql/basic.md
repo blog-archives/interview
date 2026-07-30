@@ -1,5 +1,5 @@
 ---
-title: MySQL 基础
+title: 基础题目
 order: 1
 ---
 
@@ -246,3 +246,39 @@ select * from A where exists (select 1 from B where B.id = A.id);
 ## 查询语句的执行顺序
 
 先执行 `FROM` 子句确定查询的表，然后 `JOIN` 子句进行表连接，接着 `WHERE` 子句过滤行，再 `GROUP BY` 子句分组，之后 `HAVING` 子句过滤分组，然后 `SELECT` 子句选择列，再 `ORDER BY` 子句排序，最后 `LIMIT` 子句限制结果行数。
+
+## 实现可重入的锁
+
+> [!NOTE] 什么是可重入的锁
+> 可重入锁简单说就是一个线程获取锁后，再次请求同一把锁时可以直接获取，不会被自己持有的锁阻塞。比如一个线程执行方法 A 时加了锁，方法 A 里又调用需要同一把锁的方法 B，可重入锁会允许这种情况，避免死锁。
+
+```sql
+CREATE TABLE `lock_table` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+
+    // 用于存储锁的名称，作为锁的唯一标识
+    `lock_name` VARCHAR(255) NOT NULL, 
+
+    // 用于存储持有锁的线程 ID，表示当前锁被哪个线程持有
+    `holder_thread_id` BIGINT NOT NULL,
+
+    // 用于存储当前锁的重入次数，表示当前锁被同一个线程重入的次数
+    `reentry_count` INT NOT NULL DEFAULT 0,
+)
+```
+
+### 加锁逻辑
+
+1. 开启事务
+2. 执行 `SELECT * FROM lock_table WHERE lock_name = ? FOR UPDATE` 查询记录是否存在
+    - 如果记录不存在，则直接加锁。执行 `INSERT INTO lock_table (lock_name, holder_thread_id, reentry_count) VALUES (?, ?, 1)`
+    - 如果记录存在，且持有者是同一个线程，则可重入，增加重入次数。执行 `UPDATE lock_table SET reentry_count = reentry_count + 1 WHERE lock_name = ? AND holder_thread_id = ?`
+3. 提交事务
+
+### 解锁逻辑
+
+1. 开启事务
+2. 执行 `SELECT * FROM lock_table WHERE lock_name = ? FOR UPDATE` 查询记录是否存在
+    - 如果记录存在，且持有者是同一个线程，且可重入次数大于 1，则减少重入次数。执行 `UPDATE lock_table SET reentry_count = reentry_count - 1 WHERE lock_name = ? AND holder_thread_id = ?`
+    - 如果记录存在，且持有者是同一个线程，且可重入次数为 1，则释放锁。执行 `DELETE FROM lock_table WHERE lock_name = ? AND holder_thread_id = ?`
+3. 提交事务

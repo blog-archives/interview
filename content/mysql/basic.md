@@ -3,28 +3,30 @@ title: 基础题目
 order: 1
 ---
 
-## SQL 和 NOSQL 的区别
+## SQL 和 NoSQL 的区别
 
-- SQL 是关系型数据库，用表格存储数据，表间有关联，遵循 ACID 事务特性，强一致性优先，适合数据结构固定、需要复杂关联查询的场景，比如金融交易系统。
-- NoSQL 是非关系型数据库，支持文档、键值对等灵活格式，遵循 BASE 思想，以最终一致性换取高可用性和扩展性，适合数据量大、并发高、结构多变的场景，比如社交平台或电商日志。
+- SQL 是关系型数据库，以表格存储数据，表之间通过关联建立联系，通常遵循 ACID 事务特性，优先保证强一致性，适合数据结构相对固定、需要复杂关联查询的场景，比如金融交易系统。
+- NoSQL 是非关系型数据库，支持文档、键值、列族、图等更灵活的数据模型，通常遵循 BASE 思想，以最终一致性换取更高的可用性和扩展性，适合数据量大、并发高、结构多变的场景，比如社交动态或日志存储。
 
-选型时，若业务对事务一致性要求高，选 SQL；若需高扩展和灵活数据格式，选 NoSQL，也可混合使用，核心数据用 SQL，非核心用 NoSQL。
+选型时，若业务对事务一致性要求高，优先选 SQL；若更看重水平扩展和灵活的数据模型，优先选 NoSQL。也可以混合使用：核心交易数据放 SQL，高吞吐、弱一致的数据放 NoSQL。
 
 ## 数据库三大范式
 
-数据库三大范式是设计关系型数据库表结构的规则，目的是减少冗余、保证数据一致性。
+数据库三大范式是设计关系型表结构的基本规则，目的是减少冗余、保证数据一致性。
 
-- **第一范式：每个列都是原子的，不可再分。** 解决列不原子的问题，确保每一列不可再分。
-    
-    比如“联系方式”不能同时存电话和地址，要拆成两列。
+- **第一范式（1NF）：每一列都是原子的，不可再分。**
 
-- **第二范式：在第一范式基础上，非主键列完全依赖主键，不能只依赖主键的一部分。** 解决部分依赖的问题。
+    比如“联系方式”不能同时塞电话和地址，应拆成“电话”“地址”两列。
 
-    比如“员工项目表”，主键是员工 ID + 项目 ID，非主键列 “参与时间” 必须同时依赖这两个主键
+- **第二范式（2NF）：在 1NF 基础上，非主键列必须完全依赖整个主键，不能只依赖主键的一部分。**
 
-- **第三范式：在第二范式基础上，非主键列不传递依赖于主键。** 解决传递依赖的问题。
+    比如“员工项目表”主键是员工 ID + 项目 ID，若把“员工姓名”也放进这张表，姓名只依赖员工 ID，就构成部分依赖，应拆到员工表。
 
-    比如用户表有用户 ID、姓名、城市，订单表就不该再存城市，直接关联用户 ID 即可。
+- **第三范式（3NF）：在 2NF 基础上，非主键列不能传递依赖于主键。**
+
+    比如订单表存了用户 ID、用户所在城市，而城市其实由用户决定，属于传递依赖；城市应放在用户表，订单表只保留用户 ID。
+
+实际业务中不必机械套用范式，适当冗余有时能换取更好的查询性能，关键是清楚冗余带来的一致性成本。
 
 ## 怎么连表查询
 
@@ -32,7 +34,7 @@ order: 1
 
 ### 内连接 Inner Join
 
-内连接返回两个表中匹配关系的行
+只返回两表中满足连接条件的匹配行。
 
 ```sql
 SELECT employees.name, departments.name
@@ -43,7 +45,7 @@ ON employees.department_id = departments.id;
 
 ### 左连接 Left Join
 
-左连接返回左表所有行，右表中匹配的行
+返回左表全部行；右表有匹配则带上匹配数据，没有匹配则右表字段为 `NULL`。
 
 ```sql
 SELECT employees.name, departments.name
@@ -54,7 +56,7 @@ ON employees.department_id = departments.id;
 
 ### 右连接 Right Join
 
-右连接返回右表所有行，左表中匹配的行
+返回右表全部行；左表有匹配则带上匹配数据，没有匹配则左表字段为 `NULL`。
 
 ```sql
 SELECT employees.name, departments.name
@@ -63,14 +65,16 @@ RIGHT JOIN departments
 ON employees.department_id = departments.id;
 ```
 
-### 全连接 Union Join
+### 全外连接 Full Outer Join
 
-全连接返回两个表中所有行的笛卡尔积，相当于内连接和左连接的并集
+返回左右两表的全部行：匹配上的拼成一行，任一侧没有匹配则另一侧字段为 `NULL`。注意：这不是笛卡尔积；笛卡尔积对应的是 `CROSS JOIN`。
+
+MySQL 不直接支持 `FULL OUTER JOIN`，常用左连接与右连接做 `UNION` 模拟：
 
 ```sql
 SELECT employees.name, departments.name
 FROM employees
-LEFT JOIN departments 
+LEFT JOIN departments
 ON employees.department_id = departments.id
 
 UNION
@@ -83,19 +87,19 @@ ON employees.department_id = departments.id;
 
 ## 如何避免插入重复数据
 
-在表的相关列上添加 UNIQUE 约束，确保列的值唯一。
+在需要唯一的列上加 `UNIQUE` 约束（或唯一索引），从数据库层保证值不重复。
 
 ```sql
 CREATE TABLE employees (
     id INT PRIMARY KEY,
-    name VARCHAR(255) UNIQUE,
-    email VARCHAR(255)
+    name VARCHAR(255),
+    email VARCHAR(255) UNIQUE
 );
 ```
 
 ### INSERT ... ON DUPLICATE KEY UPDATE
 
-在建立了唯一索引的基础上，通过 `ON DUPLICATE KEY UPDATE` 语句，当发生重复冲突时，可以更新指定列的值。
+在已有唯一索引的前提下，插入时若触发重复键冲突，则转为更新指定列。
 
 ```sql
 INSERT INTO employees (id, name, email)
@@ -106,35 +110,35 @@ email = VALUES(email);
 
 ### INSERT IGNORE
 
-在建立了唯一索引的基础上，通过 `INSERT IGNORE` 语句，当发生重复冲突时，可以忽略重复数据。
+在已有唯一索引的前提下，插入时若触发重复键冲突，则忽略该条插入，不报错。
 
 ```sql
 INSERT IGNORE INTO employees (id, name, email)
 VALUES (1, 'John Doe', 'john.doe@example.com');
 ```
 
-### 业务层的 FirstOrCreate?
+### 业务层的 FirstOrCreate？
 
-`FirstOrCreate` 不能替代唯一索引，因为它无法从根本上解决高并发下的数据重复问题。
+`FirstOrCreate` 不能替代唯一索引，因为它无法从根本上解决高并发下的重复写入。
 
-当使用 `Attrs` 或 `Assign` 时，它更像是业务层对“查询+插入/更新”逻辑的封装，而非对数据库 `ON DUPLICATE KEY UPDATE` 的直接替代。其底层通过非原子的两次 SQL 操作实现，高并发下仍可能因间隙插入导致重复。大部分场景下，确保数据唯一性应优先依赖数据库唯一索引，再结合 `ON DUPLICATE KEY UPDATE` 处理冲突更新，`FirstOrCreate` 仅适合对唯一性要求不严格、并发极低的边缘场景。
+使用 `Attrs` 或 `Assign` 时，它更像是业务层对“先查再插/更新”的封装，而不是数据库 `ON DUPLICATE KEY UPDATE` 的等价物。底层通常是非原子的两次 SQL，高并发下仍可能因间隙插入导致重复。保证唯一性应优先依赖数据库唯一索引，再配合 `ON DUPLICATE KEY UPDATE` 处理冲突；`FirstOrCreate` 只适合对唯一性要求不严、并发极低的边缘场景。
 
 ## CHAR 和 VARCHAR 的区别
 
-- CHAR 是定长字符串，长度固定，不足会用空格填充，查询时会自动去掉末尾空格，适合存储长度固定的数据，比如手机号、身份证号。
-- VARCHAR 是变长字符串，长度可变，只占用实际数据长度+1或2字节的额外空间，不会填充空格，适合存储长度不固定的数据，比如用户名、地址。
+- `CHAR` 是定长字符串，按声明长度分配空间，不足部分用空格填充；检索时会去掉末尾空格。适合长度固定且较短的数据，如状态码、MD5。
+- `VARCHAR` 是变长字符串，按实际内容占用空间，并额外使用 1 或 2 字节记录长度。适合长度不固定的数据，如用户名、地址。
 
-从性能看，CHAR 查询更快，因为长度固定，VARCHAR 更节省存储空间。
+存储上 `VARCHAR` 通常更省空间；性能上两者在 InnoDB 中差距通常不大，不必过度迷信“`CHAR` 一定更快”，应按数据长度特征和业务语义选择。
 
 ## varchar(n) 中的 n 代表什么
 
-varchar 后面的数字代表字符数，具体字节数取决于字符编码和实际存储的字符数。以 utf8mb4 编码为例，每个字符占 1-4 字节，varchar (5) 存 5 个英文占 5 字节，存 5 个中文则占 20 字节，同时还会额外加 1-2 字节存储长度信息。
+`varchar(n)` 中的 `n` 表示最多可存储的 **字符数**，不是字节数；实际占用字节数取决于字符集和具体内容。以 `utf8mb4` 为例，一个字符最多占 4 字节，因此 `varchar(5)` 存 5 个英文字母大约 5 字节，存 5 个汉字大约 20 字节，此外还会额外占用 1 或 2 字节保存长度信息。
 
 ## int(1) 和 int(10) 的区别
 
-在 MySQL 中，int(1) 和 int(10) 的存储大小完全相同，都是4字节，能存储的整数范围也一样。
+在 MySQL 中，`int(1)` 和 `int(10)` 的存储空间相同，都是 4 字节，能表示的整数范围也完全一样。
 
-区别仅在于显示宽度，当设置了 `zerofill` 时，int(10) 会用 0 填充到 10 位，比如存储 5 会显示 0000000005，而 int(1) 显示 05，但不影响实际存储的值。如果没有 `zerofill`，两者显示效果没有区别。
+括号里的数字只是 **显示宽度**。只有配合 `ZEROFILL` 时才有实际观感差异：`int(10) ZEROFILL` 存储 `5` 会显示为 `0000000005`；`int(1) ZEROFILL` 存储 `5` 仍显示为 `5`（宽度不够时不会截断数值，仍按完整数值输出）。未设置 `ZEROFILL` 时，两者显示没有区别。
 
 ```sql
 CREATE TABLE test (
@@ -154,14 +158,14 @@ CREATE TABLE test (
 
 ## IP 地址怎么存储
 
-如果只是简单存储、直接查看，选 `VARCHAR(15)` 存 IPv4 字符串最方便；如果数据量大，想节省空间、提升查询速度，就用 `INT UNSIGNED` 配合 `INET_ATON/INET_NTOA` 转换。
+若只是简单存取、直接查看，用 `VARCHAR(15)` 存 IPv4 字符串最方便；若数据量大，想省空间并提升比较/范围查询效率，可用 `INT UNSIGNED`，配合 `INET_ATON` / `INET_NTOA` 转换。若还需支持 IPv6，可用 `VARBINARY(16)` 或 `VARCHAR(45)`。
 
 ### 字符串类型存储
 
-直接将 IP 地址作为字符串存储在数据库中，比如 `VARCHAR(15)`。
+直接把 IP 当作字符串存储，例如 `VARCHAR(15)`。
 
-- 优点：直观易懂，方便直接进行数据的插入、查询和显示，不需要进行额外的转换操作
-- 缺点：占用存储空间较大，字符串比较操作的性能相对较低，不利于进行范围查询。
+- 优点：直观，插入、查询、展示都方便，无需转换。
+- 缺点：占用空间更大，字符串比较相对慢，也不利于范围查询。
 
 ```sql
 CREATE TABLE ip_records (
@@ -174,10 +178,10 @@ INSERT INTO ip_records (ip) VALUES ('192.168.1.1');
 
 ### 整数类型存储
 
-将 IPv4 地址转换为 32 位无符号整数进行存储，常用的数据类型有 `INT UNSIGNED`
+把 IPv4 转成 32 位无符号整数存储，常用 `INT UNSIGNED`。
 
-- 优点：节省存储空间，整数比较操作的性能较高，适合进行范围查询。
-- 缺点：需要进行额外的转换操作，不直观，不方便直接进行数据的插入、查询和显示。
+- 优点：更省空间，整数比较更快，适合范围查询。
+- 缺点：读写需要转换，不够直观。
 
 ```sql
 CREATE TABLE ip_records (
@@ -192,17 +196,18 @@ SELECT INET_NTOA(ip) FROM ip_records;
 
 ## 外键约束
 
-外键约束的作用是强制从表的关联字段值必须匹配主表的主键/唯一键值或为 NULL，以此保证表之间数据的一致性和完整性。
+外键约束要求从表关联字段的值必须等于主表对应主键/唯一键的值，或者为 `NULL`，以此维护表间引用完整性。
 
-### 主表中删除一条记录对从表造成什么影响
+### 主表删除一条记录时，从表会怎样
 
-这取决于外键设置的 `ON DELETE` 规则。
+取决于外键的 `ON DELETE` 规则：
 
-- 如果是 `RESTRICT` 或 `NO ACTION`，主表删除时会报错阻止；
-- 如果是 `CASCADE`，主表删除后从表关联记录也会被删除；
-- 如果是 `SET NULL`，主表删除后从表外键列会设为 `NULL`；
-- 如果是 `SET DEFAULT`，会设为默认值。
-- 默认规则通常是 `RESTRICT`，即不允许删除有从表关联的主表记录。
+- `RESTRICT` / `NO ACTION`：若从表仍有引用，则禁止删除主表记录并报错；
+- `CASCADE`：删除主表记录时，同步删除从表中关联记录；
+- `SET NULL`：删除主表记录后，从表外键列置为 `NULL`（该列须允许为空）；
+- `SET DEFAULT`：理论上会设为默认值，但 InnoDB 并不支持该选项。
+
+未显式指定时，常见默认行为接近 `RESTRICT`，即不允许删除仍被引用的主表记录。
 
 ```sql
 CREATE TABLE orders (
@@ -215,70 +220,103 @@ DELETE FROM users WHERE id = 1;
 
 ## in 和 exists 的区别
 
-### in 原理
+### IN 的执行思路
 
-1. 数据库会先执行内表查询 `select id from B`，把结果存成一个临时的列表，比如 [1,2,3]。
-2. 然后对外表 A 的每一行，检查它的 id 是否在这个列表里，在的话就保留这行数据。
+1. 先执行子查询 `SELECT id FROM B`，得到一个结果集合，例如 `[1, 2, 3]`。
+2. 再扫描外表 `A`，判断每一行的 `id` 是否落在这个集合中；在则保留。
 
-因为列表会用 hash 结构存储，查值的时候很快，所以如果 B 的数据少，列表小，这个过程就很高效。但如果 B 的数据特别多，列表会很大，hash 连接的开销就会增加。
+当 `B` 结果集较小时，集合查找通常很快；若 `B` 很大，物化结果集的成本会明显上升。
 
 ```sql
-select * from A where id in (select id from B);
+SELECT * FROM A WHERE id IN (SELECT id FROM B);
 ```
 
-### exists 原理
+### EXISTS 的执行思路
 
-1. 数据库会先取外表 A 的第一行记录，假设 A.id 是 1
-2. 然后带着这个 1 去内表 B 里执行 `select 1 from B where B.id=1`，如果 B 里有 `id=1` 的记录，不管有多少条，只要找到第一条就立刻停止查询 B，返回 “存在”，于是 A 的这行记录会被保留。
-3. 接着取 A 的第二行，重复这个过程，直到 A 的所有行都检查完。
+1. 逐行取外表 `A` 的记录。
+2. 把当前行的关联值代入子查询，例如执行 `SELECT 1 FROM B WHERE B.id = A.id`；只要找到一行就立刻停止，返回“存在”。
+3. 对 `A` 的每一行重复该过程。
 
-所以如果 A 的数据量小，需要检查的次数少，exists 就很快；如果 A 很大，但内表 B 的 id 有索引，每次查 B 也能快速找到，效率也不会差。
+因此当 `A` 较小，或 `B` 的关联字段有合适索引时，`EXISTS` 往往表现不错。
 
 ```sql
-select * from A where exists (select 1 from B where B.id = A.id);
+SELECT * FROM A WHERE EXISTS (SELECT 1 FROM B WHERE B.id = A.id);
 ```
 
 ### 选择与比较
 
-- 性能差异：内表小用 `IN`，外表小用 `EXISTS`；内表大且关联字段有索引，优先 `EXISTS`。
-- NULL 值处理：`IN` 会把 `NULL` 值包含在子查询结果里，但 `“字段 IN (NULL)”` 的结果永远是 `NULL`，不会匹配任何行；`EXISTS` 子查询里如果出现 `NULL`，只要子查询能返回行，就会认为“存在”，比如 `“EXISTS (SELECT NULL)”` 会返回 `TRUE`，导致主查询所有行都被选中。
+- 经验规则：内表结果集小，倾向 `IN`；外表小或内表很大且关联列有索引，倾向 `EXISTS`。现代 MySQL 优化器常会改写二者，实际应以执行计划为准。
+- `NULL` 处理：`IN` 子查询结果中若包含 `NULL`，可能让部分判断变成 `UNKNOWN`，从而筛不中行；`EXISTS` 只关心子查询是否返回行，即使子查询选出的是 `NULL`，只要有行就视为存在，例如 `EXISTS (SELECT NULL)` 为真。
 
 ## 查询语句的执行顺序
 
-先执行 `FROM` 子句确定查询的表，然后 `JOIN` 子句进行表连接，接着 `WHERE` 子句过滤行，再 `GROUP BY` 子句分组，之后 `HAVING` 子句过滤分组，然后 `SELECT` 子句选择列，再 `ORDER BY` 子句排序，最后 `LIMIT` 子句限制结果行数。
+逻辑执行顺序通常是：
+
+1. `FROM` / `JOIN`：确定并连接数据源
+2. `WHERE`：按行过滤
+3. `GROUP BY`：分组
+4. `HAVING`：按分组结果过滤
+5. `SELECT`：选择输出列（含别名、聚合等）
+6. `DISTINCT`：去重
+7. `ORDER BY`：排序
+8. `LIMIT` / `OFFSET`：限制返回行数
+
+这是理解 SQL 的逻辑顺序；优化器实际物理执行计划可能不同，但写 SQL 和排查结果时按这个顺序思考最稳妥。
 
 ## 实现可重入的锁
 
-> [!NOTE] 什么是可重入的锁
-> 可重入锁简单说就是一个线程获取锁后，再次请求同一把锁时可以直接获取，不会被自己持有的锁阻塞。比如一个线程执行方法 A 时加了锁，方法 A 里又调用需要同一把锁的方法 B，可重入锁会允许这种情况，避免死锁。
+> [!NOTE] 什么是可重入锁
+> 可重入锁指同一个线程已经持有某把锁后，再次请求同一把锁可以直接成功，而不会被自己阻塞。例如线程执行方法 A 时加了锁，A 内部又调用同样需要这把锁的方法 B，可重入锁允许继续进入，从而避免“自己锁死自己”。
 
 ```sql
-CREATE TABLE `lock_table` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-
-    // 用于存储锁的名称，作为锁的唯一标识
-    `lock_name` VARCHAR(255) NOT NULL, 
-
-    // 用于存储持有锁的线程 ID，表示当前锁被哪个线程持有
-    `holder_thread_id` BIGINT NOT NULL,
-
-    // 用于存储当前锁的重入次数，表示当前锁被同一个线程重入的次数
-    `reentry_count` INT NOT NULL DEFAULT 0,
-)
+CREATE TABLE lock_table (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    -- 锁名称，作为锁的唯一标识
+    lock_name VARCHAR(255) NOT NULL,
+    -- 当前持有锁的线程 ID
+    holder_thread_id BIGINT NOT NULL,
+    -- 同一线程的重入次数
+    reentry_count INT NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_lock_name (lock_name)
+);
 ```
 
 ### 加锁逻辑
 
 1. 开启事务
-2. 执行 `SELECT * FROM lock_table WHERE lock_name = ? FOR UPDATE` 查询记录是否存在
-    - 如果记录不存在，则直接加锁。执行 `INSERT INTO lock_table (lock_name, holder_thread_id, reentry_count) VALUES (?, ?, 1)`
-    - 如果记录存在，且持有者是同一个线程，则可重入，增加重入次数。执行 `UPDATE lock_table SET reentry_count = reentry_count + 1 WHERE lock_name = ? AND holder_thread_id = ?`
+2. 执行 `SELECT * FROM lock_table WHERE lock_name = ? FOR UPDATE`
+    - 记录不存在：插入新锁，`reentry_count = 1`
+    - 记录存在且持有者是当前线程：重入，`reentry_count = reentry_count + 1`
+    - 记录存在且持有者是其他线程：加锁失败或阻塞等待（按业务策略处理）
 3. 提交事务
+
+对应 SQL 示意：
+
+```sql
+INSERT INTO lock_table (lock_name, holder_thread_id, reentry_count)
+VALUES (?, ?, 1);
+
+UPDATE lock_table
+SET reentry_count = reentry_count + 1
+WHERE lock_name = ? AND holder_thread_id = ?;
+```
 
 ### 解锁逻辑
 
 1. 开启事务
-2. 执行 `SELECT * FROM lock_table WHERE lock_name = ? FOR UPDATE` 查询记录是否存在
-    - 如果记录存在，且持有者是同一个线程，且可重入次数大于 1，则减少重入次数。执行 `UPDATE lock_table SET reentry_count = reentry_count - 1 WHERE lock_name = ? AND holder_thread_id = ?`
-    - 如果记录存在，且持有者是同一个线程，且可重入次数为 1，则释放锁。执行 `DELETE FROM lock_table WHERE lock_name = ? AND holder_thread_id = ?`
+2. 执行 `SELECT * FROM lock_table WHERE lock_name = ? FOR UPDATE`
+    - 记录存在、持有者是当前线程，且 `reentry_count > 1`：重入次数减 1
+    - 记录存在、持有者是当前线程，且 `reentry_count = 1`：删除记录，真正释放锁
+    - 持有者不是当前线程：无权解锁，直接失败
 3. 提交事务
+
+对应 SQL 示意：
+
+```sql
+UPDATE lock_table
+SET reentry_count = reentry_count - 1
+WHERE lock_name = ? AND holder_thread_id = ? AND reentry_count > 1;
+
+DELETE FROM lock_table
+WHERE lock_name = ? AND holder_thread_id = ? AND reentry_count = 1;
+```

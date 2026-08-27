@@ -1,0 +1,205 @@
+{
+  "main": {
+    "id": "2a7e555aa4d271e5",
+    "type": "split",
+    "children": [
+      {
+        "id": "ffc956200b57e96f",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "df002d6856e84e7d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "kafka.md",
+                "mode": "preview",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "kafka"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "23e9a8b56c575895",
+    "type": "split",
+    "children": [
+      {
+        "id": "4614ab89f74f61f9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "6be7ad3b22f77810",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "文件列表"
+            }
+          },
+          {
+            "id": "b92463c282db30d5",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "搜索"
+            }
+          },
+          {
+            "id": "f6d09a4d13789103",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "书签"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "right": {
+    "id": "7234681adcf05107",
+    "type": "split",
+    "children": [
+      {
+        "id": "40a21e8926e29e2b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e9046b0258c2ec31",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "kafka.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "kafka 的反向链接列表"
+            }
+          },
+          {
+            "id": "66479bc179bddbba",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "kafka.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "kafka 的出链列表"
+            }
+          },
+          {
+            "id": "091cdeaf921621fb",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "标签"
+            }
+          },
+          {
+            "id": "2fc74b750c087394",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "添加笔记属性"
+            }
+          },
+          {
+            "id": "0615110b1587b715",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "kafka.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "kafka 的大纲"
+            }
+          },
+          {
+            "id": "8b8d469772dad343",
+            "type": "leaf",
+            "state": {
+              "type": "sidenote-view",
+              "state": {
+                "filePath": "kafka.md"
+              },
+              "icon": "message-square",
+              "title": "Side note"
+            }
+          }
+        ],
+        "currentTab": 5
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:打开快速切换": false,
+      "graph:查看关系图谱": false,
+      "canvas:新建白板": false,
+      "daily-notes:打开/创建今天的日记": false,
+      "templates:插入模板": false,
+      "command-palette:打开命令面板": false,
+      "bases:新建数据库": false,
+      "side-comments-origin:Side note: Open in sidebar": false
+    }
+  },
+  "active": "df002d6856e84e7d",
+  "lastOpenFiles": [
+    "side-note-data/kafka.json",
+    "side-note-data"
+  ]
+}

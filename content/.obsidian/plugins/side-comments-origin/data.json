@@ -1,0 +1,11 @@
+{
+  "commentSortOrder": "position",
+  "showHighlights": true,
+  "markdownFolder": "side-note-comments",
+  "attachmentFolder": "side-note-attachments",
+  "highlightColor": "#FFC800",
+  "highlightOpacity": 0.2,
+  "enableSelectionToolbar": true,
+  "commentsDataFolder": "side-note-data",
+  "imageHashes": {}
+}

@@ -1,183 +1,126 @@
-## 什么是 PV？什么是 PVC？两者为什么要分开？
+---
+title: 持久化存储
+order: 6
+---
 
-PV 是 K8s 对底层持久化存储的抽象，PVC 是应用对存储需求的申请。
+## PV、PVC、StorageClass 分别是什么？为什么要分层？
 
-Pod 不需要指定具体使用哪一个 PV，只需要引用 PVC，声明需要多大容量和什么访问方式。K8s 会匹配已有 PV，或者通过 StorageClass 动态创建 PV。这样应用就不需要关心底层到底使用云硬盘、NFS 还是其他存储。
+- **PersistentVolume（PV）**：集群级资源，表示一份已制备的持久存储，生命周期独立于使用它的 Pod；
+- **PersistentVolumeClaim（PVC）**：Namespace 级资源，表示应用对容量、访问模式和存储类别的申请；
+- **StorageClass**：集群级资源，描述一类存储的 provisioner、参数、回收策略、绑定时机和扩容能力等。
 
-### 延伸问题
-
-1. PVC 创建后一定能绑定到 PV 吗？
-
-> 不一定。如果没有容量、访问模式和 StorageClass 等条件都匹配的 PV，并且无法动态创建新 PV，PVC 就会处于 Pending 状态。
-
-2. StorageClass 和 PV、PVC 有什么关系？
-
-> StorageClass 描述了使用哪类存储以及如何创建存储。当 PVC 指定 StorageClass 后，K8s 可以根据它动态创建符合要求的 PV。
-
-3. Pod 被删除后，存储的数据会消失吗？
-
-> 通常不会。Pod 只是通过 PVC 使用存储，删除 Pod 一般不会删除 PVC 和 PV，新 Pod 重新挂载同一个 PVC 后还能访问原来的数据。
-
-4. 一个 PVC 可以被多个 Pod 使用吗？
-
-> 要看 PV 的访问模式和底层存储能力。部分存储只能由单个节点挂载，支持 ReadWriteMany 的网络存储则可以被多个节点上的 Pod 同时读写。
-
-5. PV 和 PVC 是一对一的吗？
-
-> 绑定关系通常是一对一，一个 PV 在同一时间只会绑定一个 PVC。不过，多个 Pod 可以根据访问模式共同使用同一个 PVC。
-
-## Pod 为什么通常挂载 PVC，而不是直接挂载 PV？
-
-Pod 通常挂载 PVC，而不是指定具体 PV。因为 Pod 只需要声明自己要使用哪份存储申请，不需要关心背后具体是哪块云硬盘、NFS 或本地存储。K8s 负责让 PVC 匹配已有 PV，或者通过 StorageClass 动态创建 PV。这样即使底层存储发生变化，Pod 的配置通常也不需要跟着修改。
+Pod 引用 PVC，而不是直接耦合某块云盘、NFS 路径或具体 PV。控制面为 PVC 匹配已有 PV，或依据 StorageClass 动态制备，使存储供给与应用消费解耦。PV 与 PVC 的绑定通常是一对一；多个 Pod 能否共用同一个 PVC，则取决于访问模式、底层存储和调度位置。
 
 ### 延伸问题
 
-1. Pod 被重新创建后，还能使用原来的数据吗？
+1. 删除 Pod 后数据会消失吗？
 
-> 可以。只要新 Pod 仍然引用原来的 PVC，并且对应存储正常，就可以重新挂载原来的 PV，继续访问已有数据。
+> 通常不会。Pod 删除不会自动删除独立 PVC；替代 Pod 引用同一 PVC 时可以重新挂载原数据。但若使用 `emptyDir`、容器可写层等临时存储，Pod 消失时数据也会丢失。
 
-2. PVC 的生命周期和 Pod 一样吗？
+2. PVC 一定能绑定成功吗？
 
-> 不一样。PVC 是独立的资源对象，删除 Pod 通常不会删除 PVC。因此，Pod 可以反复创建和删除，而持久化数据继续保留。
+> 不一定。容量、访问模式、StorageClass、selector、存储拓扑或 provisioner 能力不匹配时，PVC 会保持 Pending。
 
-3. 不同命名空间的 Pod 可以引用同一个 PVC 吗？
+3. 不同 Namespace 的 Pod 能引用同一 PVC 吗？
 
-> 通常不可以。PVC 属于命名空间，Pod只能直接引用同一命名空间中的 PVC；PV 则是集群级别资源。
+> 不能直接引用。PVC 属于 Namespace，Pod 只能引用同 Namespace 的 PVC；PV 和 StorageClass 则是集群级资源。
 
-4. Deployment 的多个 Pod 可以引用同一个 PVC 吗？
+## 静态制备和动态制备有什么区别？`WaitForFirstConsumer` 解决什么问题？
 
-> 可以声明引用，但能否成功挂载取决于存储的访问模式和 Pod 所在节点。多副本共享读写一般需要底层存储支持 ReadWriteMany。
+静态制备由管理员先创建底层存储和 PV，再等待 PVC 匹配。动态制备是在 PVC 出现后，由 StorageClass 指定的 CSI provisioner 创建底层存储和 PV，并自动绑定。
 
-5. Pod 可以绕过 PVC，直接使用存储吗？
+PVC 未填写 `storageClassName` 时，集群如果有默认 StorageClass，通常会采用默认类；显式设置 `storageClassName: ""` 则表示不请求 StorageClass 动态制备，并只匹配无存储类的 PV。
 
-> 某些存储类型可以直接写在 Pod 配置中，例如 `emptyDir`、`hostPath` 或部分临时卷。但对于需要独立生命周期、动态分配和统一管理的持久化存储，通常应该使用 PVC。
+StorageClass 的 `volumeBindingMode` 常见为：
 
-## 静态制备与动态制备存储卷分别是什么？
-
-静态制备是管理员提前准备底层存储并创建 PV，PVC 创建后从现有 PV 中匹配。动态制备是先创建 PVC，再根据 StorageClass 的配置，通过存储插件自动创建底层存储和对应的 PV，并与 PVC 绑定。
-
-### 延伸问题
-
-1. 动态制备为什么需要 StorageClass？
-
-> StorageClass 用来描述使用哪种存储类型、哪个存储插件以及相关创建参数。动态制备系统会根据这些信息创建底层存储和 PV。
-
-2. PVC 没有指定 StorageClass，还能动态制备吗？
-
-> 如果集群配置了默认 StorageClass，通常可以使用默认类型动态创建；如果没有默认 StorageClass，也没有合适的已有 PV，PVC 就可能一直处于 Pending。
-
-3. 动态制备失败时，应该检查什么？
-
-> 先检查 PVC 的事件信息，再检查 StorageClass 是否存在、存储插件是否正常，以及底层存储系统是否还有容量或创建权限。
-
-4. 动态创建的 PVC 被删除后，PV 和底层存储也会删除吗？
-
-> 取决于 PV 的回收策略。`Delete` 通常会删除 PV 和底层存储；`Retain` 会保留底层数据，需要管理员后续处理。
-
-5. 为什么有些动态存储要等 Pod 被调度后才创建？
-
-> 因为某些存储与可用区或节点位置有关。系统需要先知道 Pod 会运行在哪里，再在合适的位置创建存储，避免 Pod 与存储不在同一区域而无法挂载。
-
-## StorageClass 起什么作用？
-
-StorageClass 用来定义一类存储的制备规则，比如使用哪个存储插件、创建哪种云硬盘、采用什么参数，以及什么时候创建和绑定存储。PVC 指定 StorageClass 后，系统就可以按照这套规则动态创建底层存储和 PV。
+- `Immediate`：PVC 创建后立即制备和绑定；
+- `WaitForFirstConsumer`：等使用 PVC 的 Pod 参与调度后，再综合 Node、可用区、亲和性等约束选择或创建存储，避免卷与 Pod 拓扑冲突。
 
 ### 延伸问题
 
-1. PVC 没有指定 StorageClass 时会怎样？
+1. 动态制备失败如何排查？
 
-> 如果集群存在默认 StorageClass，通常会使用默认类型进行动态制备；如果没有默认类型，也没有可匹配的静态 PV，PVC 就可能保持 Pending。
+> 先看 PVC Events，再检查 StorageClass、CSI Controller / Node 插件、配额、云权限、容量和拓扑限制。Pod 与 PVC 互相等待时要结合两者的 Events 分析。
 
 2. 一个集群可以有多个 StorageClass 吗？
 
-> 可以。不同 StorageClass 可以代表 SSD、普通云硬盘或网络存储等不同类型，应用根据性能、成本和访问方式选择。
+> 可以，例如普通盘、SSD 和共享文件存储。应用按性能、成本、访问模式、可用区和数据保护要求选择。
 
-3. StorageClass 中的 `provisioner` 是什么？
+3. PVC 扩容需要什么条件？
 
-> 它表示由哪个存储插件负责创建和管理存储。例如云厂商或存储系统提供的 CSI 插件，会根据 PVC 请求创建底层存储和 PV。
+> StorageClass 允许扩容、CSI 驱动和底层存储支持相应操作，文件系统扩容还可能在节点挂载阶段完成。扩容前仍应备份重要数据并验证驱动行为。
 
-4. `Immediate` 和 `WaitForFirstConsumer` 有什么区别？
+## RWO、ROX、RWX、RWOP 分别表示什么？
 
-> `Immediate` 会在 PVC 创建后立即制备和绑定存储；`WaitForFirstConsumer` 会等到 Pod 参与调度后，再根据 Pod 所在区域创建合适的存储。
+| 模式 | 含义 |
+|---|---|
+| `ReadWriteOnce`（RWO） | 可由一个 Node 以读写方式挂载 |
+| `ReadOnlyMany`（ROX） | 可由多个 Node 以只读方式挂载 |
+| `ReadWriteMany`（RWX） | 可由多个 Node 以读写方式挂载 |
+| `ReadWriteOncePod`（RWOP） | 整个集群中只允许一个 Pod 以读写方式挂载，需 CSI 支持 |
 
-5. PVC 扩容和 StorageClass 有什么关系？
-
-> StorageClass 需要允许卷扩容，底层存储插件也必须支持。满足这些条件后，扩大 PVC 的容量申请，系统才能对存储进行扩容。
-
-## PVC 删除后，底层存储数据一定会被删除吗？
-
-不一定。PVC 删除后，底层存储是否删除，主要取决于对应 PV 的回收策略。Delete 会尝试删除 PV 和底层存储；Retain 会保留底层存储和数据，等待管理员手动处理。
-
-### 延伸问题
-
-1. 如何知道 PVC 删除后数据会不会被删除？
-
-> 查看它绑定的 PV 的回收策略。最终起作用的是 PV 上的 `persistentVolumeReclaimPolicy`，而不是只看 PVC。
-
-2. 动态创建的 PV 回收策略由谁决定？
-
-> 通常由 StorageClass 中的回收策略决定，并在创建 PV 时写入 PV。很多动态存储默认使用 `Delete`。
-
-3. `Retain` 策略下，删除 PVC 后 PV 能立即给其他 PVC 使用吗？
-
-> 通常不能。PV 会进入 `Released` 状态，管理员需要确认数据如何处理、清理原来的绑定信息，然后才能重新使用。
-
-4. PVC 正在被 Pod 使用时可以立即删除吗？
-
-> 删除请求可以提交，但 K8s 通常会延迟真正删除 PVC，直到没有 Pod 再使用它，避免正在使用的存储突然消失。
-
-5. 可以在删除 PVC 前把回收策略从 `Delete` 改成 `Retain` 吗？
-
-> 可以修改对应 PV 的回收策略。对于重要数据，删除 PVC 前改为 `Retain`，可以降低底层存储被一起删除的风险，但仍然应该提前备份。
-
-## ReadWriteOnce、ReadOnlyMany、ReadWriteMany 分别代表什么？
-
-这三种都是持久卷的访问模式，描述存储可以被多少个节点挂载，以及挂载后能读还是能写。ReadWriteOnce 表示只能被一个节点以读写方式挂载；ReadOnlyMany 表示可以被多个节点只读挂载；ReadWriteMany 表示可以被多个节点同时读写挂载。
+RWO 限制的是 Node，不等于只能有一个 Pod；同一 Node 上的多个 Pod 仍可能访问同一 RWO 卷。访问模式主要用于能力声明、匹配和挂载约束，RWX 也不会自动提供文件锁、事务或应用级一致性，并发安全仍由存储系统和应用负责。
 
 ### 延伸问题
 
-1. RWO 是否表示只能被一个 Pod 使用？
+1. 为什么很多云硬盘不支持 RWX？
 
-> 不是。RWO 限制的是只能被一个节点以读写方式挂载。同一节点上的多个 Pod 仍可能共同使用这个卷。
+> 块存储通常面向单节点挂载；多节点共享读写一般需要 NFS、CephFS 等共享文件系统或其他明确支持多挂载的存储。
 
-2. 如果希望卷只能被一个 Pod 读写，应该使用什么模式？
+2. PVC 申请 RWX 一直 Pending，常见原因是什么？
 
-> 可以使用 `ReadWriteOncePod`，简称 RWOP。它限制一个卷在整个集群中只能被一个 Pod 以读写方式挂载，但需要存储插件支持。
+> 集群没有能提供 RWX 的 PV，或所选 StorageClass / CSI 驱动不支持该模式。写了 RWX 不会让底层单挂载磁盘自动具备共享能力。
 
-3. 所有存储系统都支持 RWX 吗？
+3. 只允许一个 Pod 写为什么优先考虑 RWOP？
 
-> 不支持。很多云硬盘只支持 RWO；RWX 通常需要 NFS、CephFS 等支持多节点共享访问的存储系统。
+> RWO 仍可能被同一 Node 上多个 Pod 使用；RWOP 表达的是集群范围单 Pod 挂载约束，更接近该需求，但必须确认 CSI 驱动支持。
 
-4. 多个 Pod 使用 RWX，就能保证并发写入安全吗？
+## 删除 PVC 后，PV 和底层数据会怎样？
 
-> 不能。RWX 只表示底层存储允许多个节点同时读写，不会自动解决文件竞争和数据一致性问题，应用仍然需要锁或其他并发控制。
+主要取决于绑定 PV 的 `persistentVolumeReclaimPolicy`：
 
-5. PVC 申请 RWX 后一直 Pending，可能是什么原因？
+- `Delete`：PVC 释放后，系统通常删除 PV 对象，并让存储插件删除底层资产；
+- `Retain`：PV 进入 Released，底层数据保留，需要管理员确认、清理或重新绑定。
 
-> 常见原因是集群中没有支持 RWX 的现有 PV，或者对应的 StorageClass 和存储插件无法动态创建支持 RWX 的存储卷。
-
-## 数据库这类有状态服务部署到 K8s 时，为什么常用 StatefulSet 加 PVC？
-
-数据库不仅需要运行容器，还需要稳定的实例身份和持久化数据。StatefulSet 可以为每个 Pod 提供稳定的名称和启动顺序，并为每个副本绑定独立的 PVC。即使 Pod 被删除并重新创建，它仍然可以使用原来的身份和存储，继续访问原来的数据。
+动态 PV 的回收策略通常继承创建它的 StorageClass。最终应查看实际 PV，而不是仅凭“动态盘”猜测。正在被 Pod 使用的 PVC 有存储对象保护机制，删除请求可能进入 Terminating，直到使用关系解除。
 
 ### 延伸问题
 
-1. StatefulSet 的 Pod 被删除后，数据会丢失吗？
+1. `Retain` 的 PV 会立刻给新 PVC 使用吗？
 
-> 通常不会。控制器会使用相同的 Pod 名称重新创建实例，并重新挂载原来的 PVC，因此可以继续访问原来的数据。
+> 通常不会。Released PV 仍保留旧 claim 信息和数据，需要管理员先决定数据处置并清理绑定信息。
 
-2. StatefulSet 如何为每个 Pod 创建独立的 PVC？
+2. 删除前把回收策略改成 `Retain` 能代替备份吗？
 
-> 通常通过 `volumeClaimTemplates` 声明存储需求。StatefulSet 会按照 Pod 序号创建对应的 PVC，让每个 Pod 拥有独立存储。
+> 不能。它只能降低自动删除底层卷的风险，无法防止应用误写、存储故障、账号误删或区域灾难。重要数据仍需快照、备份和恢复演练。
 
-3. StatefulSet 缩容后，对应的 PVC 会自动删除吗？
+3. 删除 PVC 是否一定立即删除云盘？
 
-> 默认通常不会。Pod 被删除后 PVC 会保留，避免缩容导致数据意外丢失。是否需要清理或重新使用这些数据，需要根据业务决定。
+> 不应这样承诺。除回收策略外，还受 CSI 驱动、finalizer、云 API 和故障状态影响；应检查 PV、VolumeAttachment、CSI 日志及云资源实际状态。
 
-4. StatefulSet 能保证数据库数据一致性和高可用吗？
+## 为什么数据库常用 StatefulSet 加 PVC？
 
-> 不能。StatefulSet只提供稳定身份、部署顺序和存储绑定。数据库复制、主从选举、数据一致性、备份和故障恢复仍然需要数据库自身或 Operator 负责。
+StatefulSet 为每个副本提供稳定序号和网络身份，并可通过 `volumeClaimTemplates` 为每个 Pod 创建独立 PVC。Pod 被替换后，相同序号的 Pod 能重新挂载原 PVC，适合需要稳定成员身份和持久数据的系统。
 
-5. 为什么数据库通常不使用 Deployment 加一个共享 PVC？
+但“StatefulSet + PVC”不等于生产级数据库高可用：
 
-> Deployment 的 Pod 身份是可互换的，而数据库副本通常需要独立身份和独立数据。多个数据库实例直接共享同一数据目录还可能造成文件冲突或数据损坏。
+- StatefulSet 不负责数据库复制、选主、脑裂防护和一致性；
+- PVC 不等于备份，也不保证跨可用区恢复；
+- 简单增加副本不会自动形成正确的 MySQL / Redis 集群；
+- 多个数据库实例直接共享同一数据目录可能导致损坏。
+
+生产环境通常优先评估托管数据库或成熟 Operator，并设计备份、恢复、升级、监控、容量和故障演练。
+
+### 延伸问题
+
+1. StatefulSet 缩容会自动删除 PVC 吗？
+
+> 默认行为通常是保留 PVC 以避免误删数据；新版本也提供可配置的 PVC 保留策略。面试中应说明实际行为要查看 `persistentVolumeClaimRetentionPolicy` 和集群版本。
+
+2. StatefulSet 是否保证 Pod 按顺序运行？
+
+> 默认 `OrderedReady` 策略会按序创建和终止；`Parallel` 会放宽顺序。顺序只是一种编排能力，应用仍要正确处理重试和成员状态。
+
+3. Pod 回来后挂上原 PVC，服务就一定恢复了吗？
+
+> 不一定。还要确认数据完整、文件系统正常、数据库日志可恢复、拓扑允许挂载，并避免旧节点上残留实例与新实例同时写入。

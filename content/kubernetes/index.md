@@ -2,15 +2,7 @@
 
 
 
-### 工作负载：Pod、Deployment、StatefulSet
 
-6. 什么是 Pod？为什么 K8s 通常不直接管理单个容器？
-7. Pod 中多个容器之间如何通信、共享什么资源？
-8. Deployment、StatefulSet、DaemonSet 分别适合什么场景？
-9. Deployment 如何实现滚动更新？更新失败如何处理？
-10. `replicas` 的作用是什么？Pod 数量少于期望值时会怎样？
-11. 什么是探针：liveness、readiness、startup probe 各解决什么问题？
-12. 一个 Go 服务启动较慢，怎样避免它还没准备好就被流量打进来？
 
 ### 服务发现与网络
 

@@ -20,15 +20,13 @@ kubectl top pod <pod> -n <namespace> --containers
 
 `describe` 重点看 Conditions、容器 State / Last State、Reason、退出码、重启次数、挂载和 Events；`top` 依赖 Metrics API，常见实现是 Metrics Server。多容器 Pod 要指定容器，应用曾经重启过时要看 `--previous`。
 
-### 延伸问题
+> Events 和应用日志分别解决什么问题？
 
-1. Events 和应用日志分别解决什么问题？
+Events 更适合发现调度、拉镜像、挂载、探针和节点动作；应用日志用于定位进程内部错误。Events 有保留期限，重要故障还应依赖集中日志、指标和审计系统。
 
-> Events 更适合发现调度、拉镜像、挂载、探针和节点动作；应用日志用于定位进程内部错误。Events 有保留期限，重要故障还应依赖集中日志、指标和审计系统。
+> `kubectl top` 没数据说明应用没使用资源吗？
 
-2. `kubectl top` 没数据说明应用没使用资源吗？
-
-> 不是。可能是 Metrics Server 未安装、API 不可用、采集延迟或权限问题。生产分析应结合长期监控，而不是只看一次 `top` 快照。
+不是。可能是 Metrics Server 未安装、API 不可用、采集延迟或权限问题。生产分析应结合长期监控，而不是只看一次 `top` 快照。
 
 ## Pod 反复重启并出现 CrashLoopBackOff，如何排查？
 
@@ -43,19 +41,17 @@ kubectl top pod <pod> -n <namespace> --containers
 5. 检查 command / args、配置、Secret、权限、文件挂载和依赖连通性；
 6. 核对镜像架构、入口进程是否前台运行，以及应用是否正常以非零退出码结束。
 
-### 延伸问题
+> Readiness 失败会导致 CrashLoopBackOff 吗？
 
-1. Readiness 失败会导致 CrashLoopBackOff 吗？
+不会直接重启容器。Liveness 或 Startup 持续失败会触发终止并可能进入重启退避；Readiness 失败主要让 Pod NotReady。
 
-> 不会直接重启容器。Liveness 或 Startup 持续失败会触发终止并可能进入重启退避；Readiness 失败主要让 Pod NotReady。
+> CrashLoopBackOff 和 ImagePullBackOff 有什么区别？
 
-2. CrashLoopBackOff 和 ImagePullBackOff 有什么区别？
+前者通常是容器已经启动但反复退出；后者是镜像无法成功拉取，业务进程通常还没启动。
 
-> 前者通常是容器已经启动但反复退出；后者是镜像无法成功拉取，业务进程通常还没启动。
+> 退出码 0 为什么也可能反复重启？
 
-3. 退出码 0 为什么也可能反复重启？
-
-> 若工作负载要求容器持续运行，而入口命令完成后正常退出，`restartPolicy: Always` 仍会再次启动。应确认该任务究竟应该用 Deployment 还是 Job。
+若工作负载要求容器持续运行，而入口命令完成后正常退出，`restartPolicy: Always` 仍会再次启动。应确认该任务究竟应该用 Deployment 还是 Job。
 
 ## Pod 显示 Running，但服务访问失败，怎么排查？
 
@@ -72,19 +68,17 @@ kubectl top pod <pod> -n <namespace> --containers
 7. NetworkPolicy、Service 数据面和 CNI 是否正常；
 8. 集群内正常但外部失败时，再查 Ingress / Gateway、LoadBalancer、DNS 和防火墙。
 
-### 延伸问题
+> Service selector 错误会看到什么？
 
-1. Service selector 错误会看到什么？
+Service 对象存在且 DNS 可能正常，但 EndpointSlice 没有预期后端，请求最终超时或被拒绝。
 
-> Service 对象存在且 DNS 可能正常，但 EndpointSlice 没有预期后端，请求最终超时或被拒绝。
+> Pod Ready 就一定能处理所有请求吗？
 
-2. Pod Ready 就一定能处理所有请求吗？
+不一定。Readiness 只代表探针所覆盖的条件通过。业务路由、特定依赖、数据或权限仍可能出错，所以探针要与 SLO 和监控互补。
 
-> 不一定。Readiness 只代表探针所覆盖的条件通过。业务路由、特定依赖、数据或权限仍可能出错，所以探针要与 SLO 和监控互补。
+> 直连 Pod 正常、通过 Service 失败说明什么？
 
-3. 直连 Pod 正常、通过 Service 失败说明什么？
-
-> 优先检查 Service / EndpointSlice 和数据面；但测试时要保证使用相同协议、端口、Host、TLS 和 NetworkPolicy 路径，避免错误对比。
+优先检查 Service / EndpointSlice 和数据面；但测试时要保证使用相同协议、端口、Host、TLS 和 NetworkPolicy 路径，避免错误对比。
 
 ## ImagePullBackOff 如何排查？
 
@@ -97,19 +91,17 @@ kubectl top pod <pod> -n <namespace> --containers
 5. 仓库权限、限流、配额和可用性；
 6. 镜像 manifest 是否包含 Node 所需 CPU 架构。
 
-### 延伸问题
+> 本机 `docker pull` 成功，为什么集群仍失败？
 
-1. 本机 `docker pull` 成功，为什么集群仍失败？
+拉取动作发生在目标 Node 的容器运行时环境，本机与 Node 的凭证、DNS、网络、证书、代理和架构都可能不同。
 
-> 拉取动作发生在目标 Node 的容器运行时环境，本机与 Node 的凭证、DNS、网络、证书、代理和架构都可能不同。
+> `ErrImagePull` 与 `ImagePullBackOff` 有什么区别？
 
-2. `ErrImagePull` 与 `ImagePullBackOff` 有什么区别？
+`ErrImagePull` 表示一次拉取失败；连续失败后进入 `ImagePullBackOff`，后续重试间隔逐渐增大。
 
-> `ErrImagePull` 表示一次拉取失败；连续失败后进入 `ImagePullBackOff`，后续重试间隔逐渐增大。
+> 为什么生产环境更推荐镜像 digest？
 
-3. 为什么生产环境更推荐镜像 digest？
-
-> digest 指向不可变内容，避免同一个 tag 被覆盖后不同节点实际运行不同镜像，也更便于审计和回滚。
+digest 指向不可变内容，避免同一个 tag 被覆盖后不同节点实际运行不同镜像，也更便于审计和回滚。
 
 ## 如何实现 Go 服务优雅下线？
 
@@ -125,19 +117,17 @@ Go 服务需要自己配合：
 
 流量摘除、代理同步和应用终止可能并行传播，仍可能有少量新请求到达。应用应先将自身设为不接新流量，并保持一段可控的 drain 时间；客户端也需要合理的超时、重试和幂等。
 
-### 延伸问题
+> `preStop` 的时间是否在宽限期之外？
 
-1. `preStop` 的时间是否在宽限期之外？
+不是。终止宽限期在执行 `preStop` 前已经开始计时，hook 占用的时间会减少留给应用处理 SIGTERM 的时间。
 
-> 不是。终止宽限期在执行 `preStop` 前已经开始计时，hook 占用的时间会减少留给应用处理 SIGTERM 的时间。
+> 节点突然断电还能优雅退出吗？
 
-2. 节点突然断电还能优雅退出吗？
+不能指望。优雅终止适用于 kubelet 能参与的正常删除或受控关机；硬故障必须靠多副本、幂等、租约 / 超时和数据恢复设计。
 
-> 不能指望。优雅终止适用于 kubelet 能参与的正常删除或受控关机；硬故障必须靠多副本、幂等、租约 / 超时和数据恢复设计。
+> 只写 `sleep` 的 preStop 足够吗？
 
-3. 只写 `sleep` 的 preStop 足够吗？
-
-> 它只能为流量传播争取时间，不能替代应用处理 SIGTERM、停止接新请求和等待在途请求。固定 sleep 也应基于实际链路验证。
+它只能为流量传播争取时间，不能替代应用处理 SIGTERM、停止接新请求和等待在途请求。固定 sleep 也应基于实际链路验证。
 
 ## Node 宕机后，Deployment 管理的服务会发生什么？
 
@@ -145,16 +135,14 @@ Go 服务需要自己配合：
 
 Pod 不会瞬间在其他节点出现。默认情况下，Node Controller 会等待一段时间再发起驱逐；普通 Pod 通常自动带有对 not-ready / unreachable 的 300 秒 `NoExecute` 容忍。原 Pod 被驱逐或删除后，ReplicaSet 才创建替代 Pod，再由 Scheduler 放到健康且有容量的 Node。具体时间受控制面参数、Pod toleration、集群规模和故障范围影响。
 
-### 延伸问题
+> 为什么不立即重建？
 
-1. 为什么不立即重建？
+短暂网络抖动时立即在别处启动可能造成不必要迁移；有状态工作负载还要防止旧实例其实仍在运行而产生双写。故障检测时间是恢复速度与误判风险的权衡。
 
-> 短暂网络抖动时立即在别处启动可能造成不必要迁移；有状态工作负载还要防止旧实例其实仍在运行而产生双写。故障检测时间是恢复速度与误判风险的权衡。
+> 新 Pod 一定能调度成功吗？
 
-2. 新 Pod 一定能调度成功吗？
+不一定。其他节点可能资源不足，或不满足亲和性、污点容忍、可用区和存储拓扑，替代 Pod 会 Pending。
 
-> 不一定。其他节点可能资源不足，或不满足亲和性、污点容忍、可用区和存储拓扑，替代 Pod 会 Pending。
+> 如何降低节点故障影响？
 
-3. 如何降低节点故障影响？
-
-> 使用多个副本、拓扑分布约束 / 反亲和性跨节点和可用区分散，预留容量，正确配置 readiness，并验证故障转移时间。PDB 主要保护自愿中断，不能阻止节点硬故障。
+使用多个副本、拓扑分布约束 / 反亲和性跨节点和可用区分散，预留容量，正确配置 readiness，并验证故障转移时间。PDB 主要保护自愿中断，不能阻止节点硬故障。

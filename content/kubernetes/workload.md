@@ -11,19 +11,17 @@ Pod 是 Kubernetes 中最小的可部署、可调度单元。一个 Pod 包含�
 
 大多数业务 Pod 只有一个主容器。只有当辅助能力必须与主容器共享网络、文件和生命周期时，才适合使用 sidecar；两个需要独立发布和扩缩容的微服务不应放进同一个 Pod。
 
-### 延伸问题
+> 容器重启和 Pod 被替换有什么区别？
 
-1. 容器重启和 Pod 被替换有什么区别？
+容器重启通常发生在同一个 Pod 内，Pod UID 和 IP 不变；Pod 被删除、驱逐或替换后会创建新对象，UID 和 IP 通常改变。Pod 不是“重启后还是原来的机器”。
 
-> 容器重启通常发生在同一个 Pod 内，Pod UID 和 IP 不变；Pod 被删除、驱逐或替换后会创建新对象，UID 和 IP 通常改变。Pod 不是“重启后还是原来的机器”。
+> Pod IP 稳定吗？
 
-2. Pod IP 稳定吗？
+只在 Pod 生命周期内相对稳定。调用方应通过 Service 发现一组可替换的 Pod，而不是把某个 Pod IP 写进配置。
 
-> 只在 Pod 生命周期内相对稳定。调用方应通过 Service 发现一组可替换的 Pod，而不是把某个 Pod IP 写进配置。
+> Init Container 和 Sidecar 有什么区别？
 
-3. Init Container 和 Sidecar 有什么区别？
-
-> Init Container 在业务容器启动前按顺序完成初始化；Sidecar 与主容器长期协作。原生 sidecar 以特殊的可重启 Init Container 表达，是否使用要结合集群版本与实现。
+Init Container 在业务容器启动前按顺序完成初始化；Sidecar 与主容器长期协作。原生 sidecar 以特殊的可重启 Init Container 表达，是否使用要结合集群版本与实现。
 
 ## Deployment、StatefulSet、DaemonSet、Job 分别适合什么场景？
 
@@ -37,19 +35,17 @@ Pod 是 Kubernetes 中最小的可部署、可调度单元。一个 Pod 包含�
 
 StatefulSet 只提供稳定身份、顺序和存储绑定，不会自动解决数据库复制、选主、数据一致性、备份和恢复；这些仍依赖数据库自身、Operator 或托管服务。
 
-### 延伸问题
+> Deployment 和 StatefulSet 最核心的区别是什么？
 
-1. Deployment 和 StatefulSet 最核心的区别是什么？
+Deployment 的副本通常同质且可互换；StatefulSet 的每个副本有稳定序号，例如 `mysql-0`，并常通过 `volumeClaimTemplates` 绑定各自的 PVC。
 
-> Deployment 的副本通常同质且可互换；StatefulSet 的每个副本有稳定序号，例如 `mysql-0`，并常通过 `volumeClaimTemplates` 绑定各自的 PVC。
+> DaemonSet 为什么通常不配置 `replicas`？
 
-2. DaemonSet 为什么通常不配置 `replicas`？
+副本数由满足调度条件的节点数决定。新增合格 Node 时控制器会创建 Pod，Node 移除后对应 Pod 也会被处理。
 
-> 副本数由满足调度条件的节点数决定。新增合格 Node 时控制器会创建 Pod，Node 移除后对应 Pod 也会被处理。
+> CronJob 能保证任务绝对只执行一次吗？
 
-3. CronJob 能保证任务绝对只执行一次吗？
-
-> 不能把调度语义当成业务 exactly-once。任务可能错过、并发或重复创建，业务处理仍应幂等，并合理配置 `concurrencyPolicy`、截止时间和历史保留数量。
+不能把调度语义当成业务 exactly-once。任务可能错过、并发或重复创建，业务处理仍应幂等，并合理配置 `concurrencyPolicy`、截止时间和历史保留数量。
 
 ## `replicas` 如何实现自愈？副本多就一定高可用吗？
 
@@ -57,15 +53,13 @@ StatefulSet 只提供稳定身份、顺序和存储绑定，不会自动解决�
 
 副本多不必然高可用。如果副本落在同一 Node 或同一可用区，仍可能被单点故障一起影响；还要结合拓扑分布约束或反亲和性、PodDisruptionBudget、足够的备用资源，以及下游容量设计。
 
-### 延伸问题
+> 为什么不手动创建多个 Pod？
 
-1. 为什么不手动创建多个 Pod？
+裸 Pod 不会因为进程或节点故障自动出现替代对象，也不便统一扩缩容和发布。生产服务通常交给工作负载控制器管理。
 
-> 裸 Pod 不会因为进程或节点故障自动出现替代对象，也不便统一扩缩容和发布。生产服务通常交给工作负载控制器管理。
+> PodDisruptionBudget 能防止所有 Pod 中断吗？
 
-2. PodDisruptionBudget 能防止所有 Pod 中断吗？
-
-> 不能。PDB 主要约束使用 Eviction API 的自愿中断，例如节点维护；它不能阻止节点宕机等非自愿中断，也不能替代多副本和合理分布。
+不能。PDB 主要约束使用 Eviction API 的自愿中断，例如节点维护；它不能阻止节点宕机等非自愿中断，也不能替代多副本和合理分布。
 
 ## Deployment 如何滚动更新？失败时如何处理？
 
@@ -84,15 +78,13 @@ kubectl rollout history deployment/<name> -n <namespace>
 kubectl rollout undo deployment/<name> -n <namespace>
 ```
 
-### 延伸问题
+> `Running` 但不 `Ready` 的新 Pod 会怎样？
 
-1. `Running` 但不 `Ready` 的新 Pod 会怎样？
+进程已运行，但尚不能接收常规 Service 流量。若一直无法 Ready，发布可能停滞，旧副本是否继续保留取决于滚动更新参数和当前可用数量。
 
-> 进程已运行，但尚不能接收常规 Service 流量。若一直无法 Ready，发布可能停滞，旧副本是否继续保留取决于滚动更新参数和当前可用数量。
+> 滚动更新、蓝绿发布和金丝雀发布有什么区别？
 
-2. 滚动更新、蓝绿发布和金丝雀发布有什么区别？
-
-> 滚动更新逐批替换副本；蓝绿同时保留两套完整环境并一次切流；金丝雀先让少量用户或流量访问新版本，再逐步扩大。后两者通常需要额外的网关、Ingress Controller、Service Mesh 或发布平台能力。
+滚动更新逐批替换副本；蓝绿同时保留两套完整环境并一次切流；金丝雀先让少量用户或流量访问新版本，再逐步扩大。后两者通常需要额外的网关、Ingress Controller、Service Mesh 或发布平台能力。
 
 ## Liveness、Readiness、Startup Probe 分别解决什么问题？
 
@@ -106,16 +98,14 @@ kubectl rollout undo deployment/<name> -n <namespace>
 
 慢启动 Go 服务通常同时配置 Startup 和 Readiness：Startup 给初始化留出时间，Readiness 在配置加载、缓存预热等工作完成后才成功。Go 进程还应正确处理 SIGTERM，实现优雅退出。
 
-### 延伸问题
+> Startup Probe 成功前，Readiness 会执行吗？
 
-1. Startup Probe 成功前，Readiness 会执行吗？
+不会。配置 Startup Probe 后，liveness 和 readiness 都要等它成功后才开始执行。这也是原笔记中需要纠正的一处。
 
-> 不会。配置 Startup Probe 后，liveness 和 readiness 都要等它成功后才开始执行。这也是原笔记中需要纠正的一处。
+> 探针过严有什么风险？
 
-2. 探针过严有什么风险？
+超时太短、阈值太低或检查外部依赖，可能在高负载时制造误判和级联故障。要结合正常延迟和启动时间设置 `timeoutSeconds`、`periodSeconds`、`failureThreshold`。
 
-> 超时太短、阈值太低或检查外部依赖，可能在高负载时制造误判和级联故障。要结合正常延迟和启动时间设置 `timeoutSeconds`、`periodSeconds`、`failureThreshold`。
+> 没配置 Liveness，进程崩溃还会重启吗？
 
-3. 没配置 Liveness，进程崩溃还会重启吗？
-
-> 可以。容器进程退出后，kubelet 会按 Pod 的 `restartPolicy` 处理。Liveness 主要用于进程没退出但已死锁或无法继续工作的情况。
+可以。容器进程退出后，kubelet 会按 Pod 的 `restartPolicy` 处理。Liveness 主要用于进程没退出但已死锁或无法继续工作的情况。

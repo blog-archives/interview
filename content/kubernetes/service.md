@@ -18,23 +18,21 @@ Service 类型不只三种：
 
 另外，`clusterIP: None` 表示 Headless Service：不分配虚拟 ClusterIP，DNS 可直接返回后端地址，常用于 StatefulSet 的成员发现。
 
-### 延伸问题
+> Service 如何找到 Pod？
 
-1. Service 如何找到 Pod？
+常见方式是 selector 匹配 Pod 标签，控制面据此维护 EndpointSlice。Service 也可以没有 selector，由用户或其他控制器维护后端。
 
-> 常见方式是 selector 匹配 Pod 标签，控制面据此维护 EndpointSlice。Service 也可以没有 selector，由用户或其他控制器维护后端。
+> NotReady 的 Pod 会接收 Service 流量吗？
 
-2. NotReady 的 Pod 会接收 Service 流量吗？
+默认不会作为常规就绪后端。特殊配置、无其他可用后端时对 terminating endpoint 的处理、以及具体数据面实现会影响边界行为，因此优雅下线不能只依赖这一句话。
 
-> 默认不会作为常规就绪后端。特殊配置、无其他可用后端时对 terminating endpoint 的处理、以及具体数据面实现会影响边界行为，因此优雅下线不能只依赖这一句话。
+> NodePort 是否只能访问运行目标 Pod 的节点？
 
-3. NodePort 是否只能访问运行目标 Pod 的节点？
+通常任意 Node 的 NodePort 都可作为入口，再由 Service 数据面转发；但 `externalTrafficPolicy: Local` 等配置会改变转发和可用性语义。
 
-> 通常任意 Node 的 NodePort 都可作为入口，再由 Service 数据面转发；但 `externalTrafficPolicy: Local` 等配置会改变转发和可用性语义。
+> Service 会把请求绝对平均地分到每个 Pod 吗？
 
-4. Service 会把请求绝对平均地分到每个 Pod 吗？
-
-> 不保证。数据面通常按连接或流进行选择，长连接、客户端连接池、拓扑和不同代理实现都会造成流量不均。
+不保证。数据面通常按连接或流进行选择，长连接、客户端连接池、拓扑和不同代理实现都会造成流量不均。
 
 ## 集群内服务如何发现和访问另一个服务？
 
@@ -46,19 +44,17 @@ Service 类型不只三种：
 
 `port` 是 Service 暴露的端口，`targetPort` 是后端应用接收流量的端口；`containerPort` 主要是 Pod 清单中的端口声明和元数据，不会单独让端口自动对外开放。
 
-### 延伸问题
+> DNS 解析成功是否说明后端一定可用？
 
-1. DNS 解析成功是否说明后端一定可用？
+不能。DNS 只解决名称到 Service 或 endpoint 的解析，还要检查 EndpointSlice、Pod readiness、应用监听、NetworkPolicy 和数据面。
 
-> 不能。DNS 只解决名称到 Service 或 endpoint 的解析，还要检查 EndpointSlice、Pod readiness、应用监听、NetworkPolicy 和数据面。
+> 可以直接访问 Pod IP 吗？
 
-2. 可以直接访问 Pod IP 吗？
+集群网络允许时技术上可以，但会失去稳定服务发现和负载分发，不应作为普通服务间调用的固定配置。点对点管理、调试或 Headless Service 场景另当别论。
 
-> 集群网络允许时技术上可以，但会失去稳定服务发现和负载分发，不应作为普通服务间调用的固定配置。点对点管理、调试或 Headless Service 场景另当别论。
+> 为什么 StatefulSet 常配 Headless Service？
 
-3. 为什么 StatefulSet 常配 Headless Service？
-
-> 它让客户端或集群成员能通过稳定 DNS 名称发现各个有身份的 Pod，而不是只访问一个负载均衡虚拟 IP。
+它让客户端或集群成员能通过稳定 DNS 名称发现各个有身份的 Pod，而不是只访问一个负载均衡虚拟 IP。
 
 ## Ingress、Gateway API、LoadBalancer Service 分别负责什么？
 
@@ -68,19 +64,17 @@ Service 类型不只三种：
 
 Kubernetes 官方目前建议新能力优先考虑 Gateway API；Ingress API 已冻结但仍是稳定 API，并没有被删除。两者通常都把流量路由到 Service，而不是让一份规则自己直接转发数据包。
 
-### 延伸问题
+> 只有 Ingress YAML，没有 Ingress Controller 会怎样？
 
-1. 只有 Ingress YAML，没有 Ingress Controller 会怎样？
+通常不会产生实际入口。Ingress 是期望路由规则，Controller 才负责配置代理、负载均衡器或边缘设备。
 
-> 通常不会产生实际入口。Ingress 是期望路由规则，Controller 才负责配置代理、负载均衡器或边缘设备。
+> Ingress 能暴露任意 TCP / UDP 服务吗？
 
-2. Ingress 能暴露任意 TCP / UDP 服务吗？
+标准 Ingress 面向 HTTP / HTTPS。其他协议通常使用 NodePort、LoadBalancer，或采用支持相应协议的 Gateway API / Controller 扩展能力。
 
-> 标准 Ingress 面向 HTTP / HTTPS。其他协议通常使用 NodePort、LoadBalancer，或采用支持相应协议的 Gateway API / Controller 扩展能力。
+> HTTPS 通常在哪里终止？
 
-3. HTTPS 通常在哪里终止？
-
-> 常见做法是在 Ingress / Gateway 层配置证书并终止 TLS，也可以做 TLS 透传或到后端再次加密，取决于 Controller 能力和安全要求。
+常见做法是在 Ingress / Gateway 层配置证书并终止 TLS，也可以做 TLS 透传或到后端再次加密，取决于 Controller 能力和安全要求。
 
 ## 集群内访问 Service 超时，如何排查？
 

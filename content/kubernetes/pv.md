@@ -11,19 +11,17 @@ order: 6
 
 Pod 引用 PVC，而不是直接耦合某块云盘、NFS 路径或具体 PV。控制面为 PVC 匹配已有 PV，或依据 StorageClass 动态制备，使存储供给与应用消费解耦。PV 与 PVC 的绑定通常是一对一；多个 Pod 能否共用同一个 PVC，则取决于访问模式、底层存储和调度位置。
 
-### 延伸问题
+> 删除 Pod 后数据会消失吗？
 
-1. 删除 Pod 后数据会消失吗？
+通常不会。Pod 删除不会自动删除独立 PVC；替代 Pod 引用同一 PVC 时可以重新挂载原数据。但若使用 `emptyDir`、容器可写层等临时存储，Pod 消失时数据也会丢失。
 
-> 通常不会。Pod 删除不会自动删除独立 PVC；替代 Pod 引用同一 PVC 时可以重新挂载原数据。但若使用 `emptyDir`、容器可写层等临时存储，Pod 消失时数据也会丢失。
+> PVC 一定能绑定成功吗？
 
-2. PVC 一定能绑定成功吗？
+不一定。容量、访问模式、StorageClass、selector、存储拓扑或 provisioner 能力不匹配时，PVC 会保持 Pending。
 
-> 不一定。容量、访问模式、StorageClass、selector、存储拓扑或 provisioner 能力不匹配时，PVC 会保持 Pending。
+> 不同 Namespace 的 Pod 能引用同一 PVC 吗？
 
-3. 不同 Namespace 的 Pod 能引用同一 PVC 吗？
-
-> 不能直接引用。PVC 属于 Namespace，Pod 只能引用同 Namespace 的 PVC；PV 和 StorageClass 则是集群级资源。
+不能直接引用。PVC 属于 Namespace，Pod 只能引用同 Namespace 的 PVC；PV 和 StorageClass 则是集群级资源。
 
 ## 静态制备和动态制备有什么区别？`WaitForFirstConsumer` 解决什么问题？
 
@@ -36,19 +34,17 @@ StorageClass 的 `volumeBindingMode` 常见为：
 - `Immediate`：PVC 创建后立即制备和绑定；
 - `WaitForFirstConsumer`：等使用 PVC 的 Pod 参与调度后，再综合 Node、可用区、亲和性等约束选择或创建存储，避免卷与 Pod 拓扑冲突。
 
-### 延伸问题
+> 动态制备失败如何排查？
 
-1. 动态制备失败如何排查？
+先看 PVC Events，再检查 StorageClass、CSI Controller / Node 插件、配额、云权限、容量和拓扑限制。Pod 与 PVC 互相等待时要结合两者的 Events 分析。
 
-> 先看 PVC Events，再检查 StorageClass、CSI Controller / Node 插件、配额、云权限、容量和拓扑限制。Pod 与 PVC 互相等待时要结合两者的 Events 分析。
+> 一个集群可以有多个 StorageClass 吗？
 
-2. 一个集群可以有多个 StorageClass 吗？
+可以，例如普通盘、SSD 和共享文件存储。应用按性能、成本、访问模式、可用区和数据保护要求选择。
 
-> 可以，例如普通盘、SSD 和共享文件存储。应用按性能、成本、访问模式、可用区和数据保护要求选择。
+> PVC 扩容需要什么条件？
 
-3. PVC 扩容需要什么条件？
-
-> StorageClass 允许扩容、CSI 驱动和底层存储支持相应操作，文件系统扩容还可能在节点挂载阶段完成。扩容前仍应备份重要数据并验证驱动行为。
+StorageClass 允许扩容、CSI 驱动和底层存储支持相应操作，文件系统扩容还可能在节点挂载阶段完成。扩容前仍应备份重要数据并验证驱动行为。
 
 ## RWO、ROX、RWX、RWOP 分别表示什么？
 
@@ -61,19 +57,17 @@ StorageClass 的 `volumeBindingMode` 常见为：
 
 RWO 限制的是 Node，不等于只能有一个 Pod；同一 Node 上的多个 Pod 仍可能访问同一 RWO 卷。访问模式主要用于能力声明、匹配和挂载约束，RWX 也不会自动提供文件锁、事务或应用级一致性，并发安全仍由存储系统和应用负责。
 
-### 延伸问题
+> 为什么很多云硬盘不支持 RWX？
 
-1. 为什么很多云硬盘不支持 RWX？
+块存储通常面向单节点挂载；多节点共享读写一般需要 NFS、CephFS 等共享文件系统或其他明确支持多挂载的存储。
 
-> 块存储通常面向单节点挂载；多节点共享读写一般需要 NFS、CephFS 等共享文件系统或其他明确支持多挂载的存储。
+> PVC 申请 RWX 一直 Pending，常见原因是什么？
 
-2. PVC 申请 RWX 一直 Pending，常见原因是什么？
+集群没有能提供 RWX 的 PV，或所选 StorageClass / CSI 驱动不支持该模式。写了 RWX 不会让底层单挂载磁盘自动具备共享能力。
 
-> 集群没有能提供 RWX 的 PV，或所选 StorageClass / CSI 驱动不支持该模式。写了 RWX 不会让底层单挂载磁盘自动具备共享能力。
+> 只允许一个 Pod 写为什么优先考虑 RWOP？
 
-3. 只允许一个 Pod 写为什么优先考虑 RWOP？
-
-> RWO 仍可能被同一 Node 上多个 Pod 使用；RWOP 表达的是集群范围单 Pod 挂载约束，更接近该需求，但必须确认 CSI 驱动支持。
+RWO 仍可能被同一 Node 上多个 Pod 使用；RWOP 表达的是集群范围单 Pod 挂载约束，更接近该需求，但必须确认 CSI 驱动支持。
 
 ## 删除 PVC 后，PV 和底层数据会怎样？
 
@@ -84,19 +78,17 @@ RWO 限制的是 Node，不等于只能有一个 Pod；同一 Node 上的多个 
 
 动态 PV 的回收策略通常继承创建它的 StorageClass。最终应查看实际 PV，而不是仅凭“动态盘”猜测。正在被 Pod 使用的 PVC 有存储对象保护机制，删除请求可能进入 Terminating，直到使用关系解除。
 
-### 延伸问题
+> `Retain` 的 PV 会立刻给新 PVC 使用吗？
 
-1. `Retain` 的 PV 会立刻给新 PVC 使用吗？
+通常不会。Released PV 仍保留旧 claim 信息和数据，需要管理员先决定数据处置并清理绑定信息。
 
-> 通常不会。Released PV 仍保留旧 claim 信息和数据，需要管理员先决定数据处置并清理绑定信息。
+> 删除前把回收策略改成 `Retain` 能代替备份吗？
 
-2. 删除前把回收策略改成 `Retain` 能代替备份吗？
+不能。它只能降低自动删除底层卷的风险，无法防止应用误写、存储故障、账号误删或区域灾难。重要数据仍需快照、备份和恢复演练。
 
-> 不能。它只能降低自动删除底层卷的风险，无法防止应用误写、存储故障、账号误删或区域灾难。重要数据仍需快照、备份和恢复演练。
+> 删除 PVC 是否一定立即删除云盘？
 
-3. 删除 PVC 是否一定立即删除云盘？
-
-> 不应这样承诺。除回收策略外，还受 CSI 驱动、finalizer、云 API 和故障状态影响；应检查 PV、VolumeAttachment、CSI 日志及云资源实际状态。
+不应这样承诺。除回收策略外，还受 CSI 驱动、finalizer、云 API 和故障状态影响；应检查 PV、VolumeAttachment、CSI 日志及云资源实际状态。
 
 ## 为什么数据库常用 StatefulSet 加 PVC？
 
@@ -111,16 +103,14 @@ StatefulSet 为每个副本提供稳定序号和网络身份，并可通过 `vol
 
 生产环境通常优先评估托管数据库或成熟 Operator，并设计备份、恢复、升级、监控、容量和故障演练。
 
-### 延伸问题
+> StatefulSet 缩容会自动删除 PVC 吗？
 
-1. StatefulSet 缩容会自动删除 PVC 吗？
+默认行为通常是保留 PVC 以避免误删数据；新版本也提供可配置的 PVC 保留策略。面试中应说明实际行为要查看 `persistentVolumeClaimRetentionPolicy` 和集群版本。
 
-> 默认行为通常是保留 PVC 以避免误删数据；新版本也提供可配置的 PVC 保留策略。面试中应说明实际行为要查看 `persistentVolumeClaimRetentionPolicy` 和集群版本。
+> StatefulSet 是否保证 Pod 按顺序运行？
 
-2. StatefulSet 是否保证 Pod 按顺序运行？
+默认 `OrderedReady` 策略会按序创建和终止；`Parallel` 会放宽顺序。顺序只是一种编排能力，应用仍要正确处理重试和成员状态。
 
-> 默认 `OrderedReady` 策略会按序创建和终止；`Parallel` 会放宽顺序。顺序只是一种编排能力，应用仍要正确处理重试和成员状态。
+> Pod 回来后挂上原 PVC，服务就一定恢复了吗？
 
-3. Pod 回来后挂上原 PVC，服务就一定恢复了吗？
-
-> 不一定。还要确认数据完整、文件系统正常、数据库日志可恢复、拓扑允许挂载，并避免旧节点上残留实例与新实例同时写入。
+不一定。还要确认数据完整、文件系统正常、数据库日志可恢复、拓扑允许挂载，并避免旧节点上残留实例与新实例同时写入。

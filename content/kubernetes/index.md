@@ -1,16 +1,6 @@
 # K8s 场景面试题（纯现象，无答案，业务后端面试向）
 
 
-### 存储：PV、PVC
-
-23. 什么是 PV？什么是 PVC？两者为什么要分开？
-24. Pod 为什么通常挂载 PVC，而不是直接挂载 PV？
-25. 静态制备与动态制备存储卷分别是什么？
-26. StorageClass 起什么作用？
-27. PVC 删除后，底层存储数据一定会被删除吗？
-28. `ReadWriteOnce`、`ReadOnlyMany`、`ReadWriteMany` 分别代表什么？
-29. 数据库这类有状态服务部署到 K8s 时，为什么常用 StatefulSet 加 PVC？
-
 ### 资源、调度与弹性
 
 30. `requests` 和 `limits` 的区别是什么？

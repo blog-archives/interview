@@ -2,7 +2,17 @@
 title: Linux 常用命令
 ---
 
-这份清单只整理后端开发、服务器排障和 Linux 基础面试中最常用的命令。使用命令时，重点不是背参数，而是知道它能验证什么问题。
+## 练习网站
+
+- [Linux Journey](https://labex.io/linuxjourney)：最适合零基础。课程从目录、文件、权限、文本处理逐步展开，并提供浏览器里的 Linux 终端。
+- [Killercoda](https://killercoda.com/)：提供真实的临时 Linux 环境，不需要安装虚拟机；适合自由实验，也有 Linux、Docker、Kubernetes 等场景。免费版单次环境最长约 1 小时。
+- [OverTheWire：Bandit](https://overthewire.org/wargames/bandit/)：闯关式学习。通过 `ssh` 登录服务器，用 `ls`、`cat`、`find`、`grep`、管道和权限命令寻找下一关密码，趣味性很强。
+- [PracticeLinux](https://www.practicelinux.com/)：浏览器终端配合 CTF 小任务，不注册也能开始，适合把常用命令练成肌肉记忆。
+- [LearnShell](https://www.learnshell.org/)：更偏 Bash 脚本，涵盖变量、循环、函数、管道、正则表达式等，页面内可以直接运行代码。
+- [SadServers](https://sadservers.com/)：适合已经掌握基本命令后练排障。它会给你一台“出故障”的真实 Linux 虚拟机，让你修复服务、网络、权限、Docker 等问题；部分练习免费。
+- [Webminal](https://www.webminal.org/)：简单的在线 Linux 终端，适合随手测试命令，但需要注册免费账户。
+
+我最推荐的路线是：**Linux Journey → Killercoda → Bandit → SadServers**。前两个打基础，Bandit练命令组合，最后用 SadServers 练真实排障。练习时不要把密码、密钥或私人文件粘贴进在线终端。
 
 ## 目录与文件
 

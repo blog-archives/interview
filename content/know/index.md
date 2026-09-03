@@ -10,26 +10,12 @@ order:
 
 | 主题 | 面试需要掌握 | 进阶追问 |
 |---|---|---|
-| [redis](/know/redis) | 数据类型、持久化、过期与淘汰、主从/哨兵/Cluster、缓存穿透/击穿/雪崩 | 热点Key、大Key、分布式锁、缓存一致性、脑裂 |
-| Kafka | Topic、Partition、Consumer Group、Offset、消息顺序、重复、丢失、积压 | ISR、ACK、Rebalance、幂等生产者、事务、KRaft |
+| [Redis](/know/redis) | 数据类型、持久化、过期与淘汰、主从/哨兵/Cluster、缓存穿透/击穿/雪崩 | 热点Key、大Key、分布式锁、缓存一致性、脑裂 |
+| [Kafka](/know/kafka) | Topic、Partition、Consumer Group、Offset、消息顺序、重复、丢失、积压 | ISR、ACK、Rebalance、幂等生产者、事务、KRaft |
 | Elasticsearch | 倒排索引、Mapping、分词、查询、分片与副本、数据同步 | 深分页、Segment、Refresh、分片规划、混合检索 |
 | 分布式系统 | CAP、最终一致性、幂等、重试、限流、熔断、降级 | Raft、分布式事务、Fencing Token、多机房容灾 |
 | 微服务治理 | 注册发现、配置中心、RPC、网关、负载均衡 | 服务雪崩、超时传播、重试风暴、灰度发布 |
 | 生产故障排查 | CPU高、内存高、接口慢、数据库慢、消息积压 | 链路追踪、容量规划、应急止损、事故复盘 |
-
-
-### Kafka重点问题
-
-至少能够完整回答：
-
-- Kafka为什么吞吐量高？
-- 如何保证消息不丢失？
-- 如何处理重复消费？
-- 如何保证消息顺序？
-- Consumer Group和Partition是什么关系？
-- Rebalance为什么危险？
-- 消息积压怎么处理？
-- Kafka和RocketMQ、RabbitMQ怎么选择？
 
 ### Elasticsearch重点问题
 

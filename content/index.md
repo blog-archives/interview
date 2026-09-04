@@ -3,6 +3,23 @@ title: 场景面试题
 order: 0
 ---
 
+| 中文 | 英文标签 |
+|---|---|
+| 分布式系统 | `Distributed` |
+| 微服务与服务治理 | `Microservices` |
+| PaaS 与基础设施 | `PaaS` |
+| 数据库与 MySQL | `Database` |
+| 缓存与 Redis | `Cache` |
+| 消息队列与异步任务 | `Messaging` |
+| 事务与数据一致性 | `Consistency` |
+| Go 与并发编程 | `Go` |
+| 性能与线上排障 | `Performance` |
+| 稳定性与可观测性 | `Reliability` |
+| 安全与认证 | `Security` |
+| 数据同步与数据处理 | `Data Pipeline` |
+| 系统设计与业务场景 | `System Design` |
+| 算法与海量数据 | `Algorithms` |
+
 ## P0：必刷，优先掌握
 
 | 原题号 | 整理后的题目 | 分类 | 优先级 |

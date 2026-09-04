@@ -1,6 +1,6 @@
 ---
 title: 快速入门
-order: 3
+order: 1
 ---
 
 

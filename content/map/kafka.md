@@ -1,6 +1,6 @@
 ---
-title: Kafka 快速入门
-order: 1
+title: Kafka
+order: 2
 ---
 
 ## 1. 它是什么

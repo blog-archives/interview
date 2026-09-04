@@ -1,6 +1,6 @@
 ---
-title: kafka
-order: 3
+title: Kafka
+order: 2
 ---
 
 ## Kafka 是什么？它主要解决后端系统中的哪些问题？

@@ -1,5 +1,5 @@
 ---
-title: 快速认识 Redis
+title: Redis
 order: 1
 ---
 

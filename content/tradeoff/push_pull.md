@@ -1,6 +1,6 @@
 ---
 title: 消息队列中的 Push 与 Pull 模式
-order:
+order: 1
 ---
 
 ## Push 模式

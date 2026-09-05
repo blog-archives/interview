@@ -41,12 +41,12 @@ order: 1
 | 13 | [ZooKeeper](zookeeper.md) | ZNode、Watch、Session、临时节点、选举和协调场景 |
 | 14 | [Consul](consul.md) | Agent、Catalog、健康检查、服务发现和 Service Mesh 边界 |
 | 15 | APISIX | 动态路由、插件、认证、限流、服务发现和网关控制面 |
-| 16 | Loki | 标签索引、日志流、LogQL，以及它和 Elasticsearch 日志方案的差异 |
+| 16 | [Loki](loki.md) | 标签索引、日志流、LogQL，以及它和 Elasticsearch 日志方案的差异 |
 | 17 | Jaeger 或 Tempo | Trace、Span、上下文传播、采样、存储和查询链路 |
 | 18 | Debezium | Snapshot、变更事件、Offset、Schema 变化和 CDC 恢复过程 |
 | 19 | MinIO | S3 对象模型、Bucket、Object、分片上传和签名 URL |
-| 20 | MongoDB | Document、Collection、索引、副本集、分片和事务边界 |
-| 21 | ClickHouse | 列式存储、分区、排序键、MergeTree 和聚合查询 |
+| 20 | [MongoDB](mongodb.md) | Document、Collection、索引、副本集、分片和事务边界 |
+| 21 | [ClickHouse](clickhouse.md) | 列式存储、分区、排序键、MergeTree 和聚合查询 |
 | 22 | Temporal | Workflow、Activity、事件历史、重试和长流程状态恢复 |
 
 RabbitMQ 和 RocketMQ 不需要在 Kafka 之后立即全部深学。先用 Kafka 建立消息系统的共同模型，再根据岗位选择其中一个做差异学习即可。
@@ -73,7 +73,7 @@ RabbitMQ 和 RocketMQ 不需要在 Kafka 之后立即全部深学。先用 Kafka
 | 缓存 | Redis | 暂时不需要同时寻找替代品 |
 | 消息队列 | Kafka | RabbitMQ 或 RocketMQ → NATS 或 Pulsar |
 | 代理与网关 | Nginx | APISIX 或 Kong → Envoy 与 Istio |
-| 搜索与日志 | Elasticsearch | Loki；ELK 作为组合方案理解，不重复算作一个产品 |
+| 搜索与日志 | Elasticsearch | [Loki](loki.md)；[ELK](elk.md) 作为组合方案理解，不重复算作一个产品 |
 | 指标与可视化 | Prometheus → Grafana | 再学习 OpenTelemetry 与统一可观测性 |
 | 注册、配置与协调 | etcd | Nacos、ZooKeeper、Consul 按岗位选择 |
 | 分布式追踪 | OpenTelemetry | Jaeger 或 Tempo |
@@ -88,4 +88,4 @@ RabbitMQ 和 RocketMQ 不需要在 Kafka 之后立即全部深学。先用 Kafka
 4. 从第二批中根据岗位选择，不要求全部学习。
 5. 第三批只保持定位认知，出现实际需求后再深入。
 
-现有文档中已经包含 Redis、Kafka、Nginx、Elasticsearch、Prometheus、Grafana、OpenTelemetry、etcd、ZooKeeper、Consul 和 Netty。后续新增文档时，优先补齐第一批缺少的 gRPC，然后再按照第二批顺序扩展。
+现有文档中已经包含 Redis、Kafka、Nginx、Elasticsearch、ELK、Loki、Prometheus、Grafana、OpenTelemetry、etcd、ZooKeeper、Consul、MongoDB、ClickHouse 和 Netty。后续新增文档时，优先补齐第一批缺少的 gRPC，然后再按照第二批顺序扩展。

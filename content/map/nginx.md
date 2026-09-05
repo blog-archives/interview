@@ -1,600 +1,126 @@
 ---
 title: Nginx
-order: 4
+order: 3
 ---
 
 ## 1. 它是什么
 
-**Nginx** 是一个高性能的 **Web 服务器（Web Server）** 和 **反向代理服务器（Reverse Proxy Server）**，也可以承担负载均衡、静态资源服务、HTTPS 终止、限流等流量处理工作。
+**Nginx 是一个事件驱动的 Web Server 和反向代理服务器，常作为系统流量入口，负责接收连接、匹配规则并把请求返回静态内容或转发给后端服务。**
 
-如果只用一句话介绍，可以说：
+第一阶段只需理解：正向代理与反向代理的区别，`server`、`location`、`proxy_pass`、`upstream` 怎样决定请求去向，一次代理请求和响应怎样流转，以及后端故障、超时和 Nginx 单点的边界。
 
-> **Nginx 是一个通常部署在客户端和业务服务之间的高性能 Web 服务器和反向代理服务器，负责接收请求、匹配规则、转发流量，并可以在多个后端实例之间进行负载均衡。**
-
-因此，不建议简单把 Nginx 定义成“网关”或者“路由”。**路由和网关能力只是它可以承担的职责；它更基础、更准确的定位仍然是 Web Server + Reverse Proxy。**
-
-对于后端系统，可以先把 Nginx 放到这个位置理解：
-
-```text
-                         ┌─ 静态文件
-                         │
-Client ──────→ Nginx ────┼─→ Go Server A
-                         ├─→ Go Server B
-                         └─→ Go Server C
-```
-
-它最常见的几个使用场景是：
-
-- 直接提供 HTML、CSS、JS、图片等静态资源；
-- 作为反向代理，把请求转发给 Go、Java 等业务服务；
-- 在多个业务实例之间进行负载均衡；
-- 额外承担 HTTPS、限流等统一流量入口能力。
-
-它不负责业务逻辑，也不能代替数据库、消息队列、注册中心或分布式一致性系统。
-
----
+客户端通常只知道 Nginx 地址。Nginx 可以终止 TLS、提供静态文件、限流并在多个应用实例间负载均衡；业务逻辑仍由 Go、Java 等后端执行。Consul 可以向系统提供动态实例地址，OpenTelemetry 可以记录调用链，Prometheus 可以采集 Nginx 指标，这些组件与代理请求各负其责。
 
 ## 2. 最小工作模型
 
-理解 Nginx，可以先忽略高并发、负载均衡等能力，只看一个最简单的反向代理。
-
-假设客户端访问：
-
-```text
-https://api.example.com/users
+```mermaid
+flowchart LR
+    A[客户端] -->|原始 HTTP 请求| B[Nginx]
+    B -->|新建上游请求| C[后端服务]
+    C -->|上游响应| B
+    B -->|最终响应| A
 ```
 
-Nginx 收到请求之后，根据配置找到对应处理规则：
+反向代理隐藏真实后端。客户端请求先到 Nginx；Nginx 根据 Host、URI 等规则选择配置，再向后端建立或复用连接并发起另一条请求。后端响应先回到 Nginx，Nginx 可以缓冲、修改 Header 或压缩后再返回客户端。
+
+## 3. Process、server、location 与 upstream
+
+### Master Process 与 Worker Process
+
+启动 Nginx 后，通常会看到一个 Master Process 和多个 Worker Process。Master 不直接处理普通 HTTP 请求，主要负责读取并校验配置、打开监听端口、创建 Worker，以及收到重载信号时平滑替换 Worker。这样修改配置后，新 Worker 使用新配置接收连接，旧 Worker 可以处理完已有请求再退出。
+
+Worker 才是真正处理客户端连接的进程。每个 Worker 内部使用事件循环观察大量 Socket：某个连接可读、可写或超时后，才继续处理对应事件，而不是为每个连接长期占用一个线程。多个 Worker 可以利用多核，但一个请求不会在几个 Worker 之间来回传递。
+
+### server：先确定由哪个虚拟主机处理
+
+`server` 是一组虚拟主机配置。它通常包含 `listen` 和 `server_name`：前者表示在哪个地址和端口接收连接，后者表示接受哪些 Host。请求到达后，Nginx 先根据监听地址，再根据请求中的 Host 选择一个 `server`；如果没有精确匹配，就进入该端口的默认 Server。
+
+因此，同一台 Nginx 可以让 `api.example.com` 和 `static.example.com` 共用 80 或 443 端口，却进入不同配置。TLS 场景还会结合 SNI 选择证书和虚拟主机，但第一阶段只要记住：`server` 解决“这个域名归哪组配置处理”。
+
+### location：在虚拟主机内匹配请求路径
+
+确定 `server` 后，Nginx 再使用 URI 选择 `location`。例如 `/api/` 可以进入反向代理规则，`/assets/` 可以读取静态文件。Location 有精确匹配、前缀匹配和正则匹配，存在明确优先级；它不是按配置文件从上到下简单命中第一条。
+
+`location` 自己通常不代表后端实例，而是一个处理规则容器。里面可以配置 `proxy_pass`、`root`、访问控制、限流或 Header。没有理解这一层，就容易把“请求匹配哪条规则”和“最终转发给哪台机器”混成同一件事。
+
+### upstream：组织一组候选后端
+
+`upstream` 给一组后端地址起一个逻辑名称，例如 `order_backend`。它还可以配置 Round Robin、Least Connections、权重、备用节点以及失败判定参数。Nginx 收到需要代理的请求时，负载均衡模块从这组候选地址中选择一个实例。
+
+Upstream 保存的是代理目标配置和少量运行状态，不保存订单数据，也不是服务注册中心。静态配置中的实例变化需要重载；动态环境可以借助 DNS、Consul、Kubernetes 或商业能力更新候选列表。
+
+### proxy_pass：真正创建上游请求
+
+`proxy_pass` 才会让 Nginx 作为 HTTP Client 向选中的上游实例发起请求。Nginx 会建立或复用到后端的连接，构造新的请求行和 Header，把响应读回来后再交给客户端。客户端与 Nginx 的连接、Nginx 与后端的连接是两条独立连接，因此两侧可以有不同的超时、Keepalive 和协议版本。
+
+把这些对象连起来就是：Master 准备配置和 Worker，Worker 接收请求，`server` 根据端口与域名选虚拟主机，`location` 根据 URI 选处理规则，`upstream` 提供候选后端，`proxy_pass` 创建真正的上游请求。
+
+## 4. 一次反向代理如何完成
+
+下面把 `/api/` 请求分配给两个订单服务：
 
 ```nginx
+upstream order_backend {
+    least_conn;
+    server 10.0.1.8:8080;
+    server 10.0.1.9:8080;
+}
+
 server {
     listen 80;
     server_name api.example.com;
 
-    location / {
-        proxy_pass http://127.0.0.1:8080;
+    location /api/ {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://order_backend;
     }
 }
 ```
 
-此时真正处理业务的是 `127.0.0.1:8080` 上运行的 Go 服务。
-
-整个过程是：
-
-```text
-Client
-   │
-   │ Request
-   ▼
-Nginx
-   │
-   │ proxy_pass
-   ▼
-Go Service
-   │
-   │ Response
-   ▼
-Nginx
-   │
-   ▼
-Client
-```
-
-这里最重要的一点是：
-
-> **反向代理不是告诉客户端“你去另一个地址访问”，而是 Nginx 自己替客户端访问后端，再把后端响应返回客户端。**
-
-Nginx 官方的代理模块本质上就是负责把请求传递给其他服务器。
-
-这和 **重定向（Redirect）** 完全不同。
-
-反向代理：
-
-```text
-Client → Nginx → Backend → Nginx → Client
-```
-
-重定向：
-
-```text
-Client → Nginx
-          │
-          └─ 返回 301 / 302 + 新地址
-
-Client → 新地址
-```
-
-所以可以简单记：
-
-> **代理是“我替你去访问”，重定向是“我告诉你去哪，你自己重新访问”。**
-
----
-
-## 3. 核心概念与关系
-
-### Master Process 与 Worker Process
-
-Nginx 使用 **主进程 / 工作进程模型（Master/Worker Process Model）**。
-
-**Master Process** 负责读取配置、启动和管理 Worker、处理 reload 等管理工作。
-
-**Worker Process** 才真正负责接收连接和处理请求。
-
-因此：
-
-```text
-Master
-  ↓
-多个 Worker
-  ↓
-处理客户端连接和请求
-```
-
-Worker 采用事件驱动方式处理网络连接，一个 Worker 可以同时管理大量连接，而不需要为每个连接单独创建一个线程。这是 Nginx 擅长高并发网络 I/O 的重要基础。Nginx 官方入门文档也将 master 与 worker 的职责明确区分。
-
-### server 与 location
-
-客户端请求进入 Nginx 后，需要先确定：
-
-> **这个请求应该按照哪一组规则处理？**
-
-**`server`** 表示一个虚拟服务器（Virtual Server），主要根据监听端口、域名等信息确定请求属于哪个站点。
-
-例如：
-
-```nginx
-server {
-    listen 80;
-    server_name api.example.com;
-}
-```
-
-确定 `server` 后，再根据 URI 匹配 **`location`**：
-
-```nginx
-location /api/ {
-    ...
-}
-```
-
-所以第一阶段可以理解为：
-
-```text
-请求
- ↓
-server：属于哪个站点？
- ↓
-location：这个 URL 怎么处理？
-```
-
-Nginx 官方请求处理文档描述的也是先确定处理请求的 `server`，再根据 URI 选择相应的 `location`。
-
-### proxy_pass
-
-**`proxy_pass`** 是反向代理最核心的指令之一，表示：
-
-> **当前请求要代理到哪个后端。**
-
-例如：
-
-```nginx
-location /api/ {
-    proxy_pass http://127.0.0.1:8080;
-}
-```
-
-因此到目前为止，请求处理主线已经可以写成：
-
-```text
-Client
- → Nginx
- → server
- → location
- → proxy_pass
- → Go Service
-```
-
-### upstream
-
-如果后端只有一个实例，`proxy_pass` 指向一个地址即可。
-
-但实际生产系统通常会部署多个实例：
-
-```text
-10.0.0.1:8080
-10.0.0.2:8080
-10.0.0.3:8080
-```
-
-这时可以定义 **上游服务器组（Upstream Group）**：
-
-```nginx
-upstream backend {
-    server 10.0.0.1:8080;
-    server 10.0.0.2:8080;
-    server 10.0.0.3:8080;
-}
-
-location /api/ {
-    proxy_pass http://backend;
-}
-```
-
-`upstream` 可以理解为：
-
-> **一组都能够处理这个请求的候选后端实例。**
-
-而负载均衡算法负责回答：
-
-> “这一次到底选哪一个？”
-
----
-
-## 4. 一次典型请求如何完成
-
-假设客户端请求：
+客户端请求：
 
 ```http
-GET /api/users
+GET /api/orders/1001 HTTP/1.1
 Host: api.example.com
 ```
 
-第一步，请求到达 Nginx，由 Worker 处理连接。
+Nginx 先命中 `server_name`，再选择 `/api/` 的 `location`，由 `least_conn` 在 upstream 中选择当前活动连接较少的实例，并发送上游请求。后端返回 JSON 后，Nginx 把状态码、Header 和 Body 返回客户端。默认配置下 URI 是否保留 `/api/` 与 `proxy_pass` 是否携带 URI 有关，实际配置必须验证路径改写结果。
 
-第二步，Nginx 根据监听端口、`Host` 等信息找到对应的 `server`。
+## 5. 静态文件、负载均衡与代理控制
 
-第三步，根据 `/api/users` 匹配对应 `location`。
+静态资源可以由 `root` 或 `alias` 映射到本机文件，Nginx 直接读取并返回，不需要访问后端。动态请求经 `proxy_pass` 转发。默认负载均衡是 Round Robin，也可使用 Least Connections、IP Hash、权重等；算法只在候选实例中选择目标，不保证某次业务一定成功。
 
-例如：
-
-```nginx
-location /api/ {
-    proxy_pass http://backend;
-}
-```
-
-第四步，发现目标是一个 `upstream`：
-
-```nginx
-upstream backend {
-    server 10.0.0.1:8080;
-    server 10.0.0.2:8080;
-}
-```
-
-Nginx 根据负载均衡策略，从中选择一个实例，比如：
-
-```text
-10.0.0.2:8080
-```
-
-第五步，Nginx 与这个 Go 服务建立连接，把 HTTP 请求转发过去。
-
-Go 服务完成业务处理后，把 Response 返回给 Nginx。
-
-最后：
-
-```text
-Go Service
-   ↓
-Nginx
-   ↓
-Client
-```
-
-所以动态请求最核心的一条链路就是：
-
-> **请求进入 → server → location → proxy_pass → upstream 选节点 → Backend → Nginx → Client**
-
----
-
-## 5. 静态资源与负载均衡
-
-### 静态资源
-
-Nginx 不一定要把所有请求都交给 Go 服务。
-
-例如：
-
-```nginx
-location / {
-    root /var/www/frontend;
-}
-```
-
-服务器文件系统中存在：
-
-```text
-/var/www/frontend/
-├── index.html
-├── app.js
-├── app.css
-└── logo.png
-```
-
-客户端请求：
-
-```text
-/logo.png
-```
-
-Nginx 可以直接找到文件并返回客户端，不需要经过 Go 服务。
-
-所以：
-
-> **静态资源通常由 Nginx 直接从它能够访问的文件系统中读取并返回。**
-
-这里的文件可以位于机器本地，也可以通过容器 Volume 等方式挂载进去。Nginx 官方 Beginner's Guide 就使用本地目录中的 HTML 和图片演示静态文件服务。
-
-典型的前后端部署就是：
-
-```nginx
-location / {
-    root /var/www/frontend;
-}
-
-location /api/ {
-    proxy_pass http://backend;
-}
-```
-
-于是：
-
-```text
-/index.html
-/app.js
-/logo.png
-        ↓
-Nginx 自己返回
-
-/api/users
-/api/orders
-        ↓
-Nginx → Go Service
-```
-
-可以简单记：
-
-> **静态资源 Nginx 自己拿，动态业务请求去后端拿。**
-
-### 负载均衡
-
-当 upstream 中有多个后端实例时，Nginx 需要选择一个。
-
-最需要掌握四类策略：
-
-| 策略 | 核心逻辑 | 典型用途 |
-|---|---|---|
-| Round Robin | 轮流分配 | 默认、实例性能接近 |
-| Weight | 性能强的多分流量 | 机器配置不同 |
-| Least Connections | 选择当前活跃连接较少的实例 | 请求耗时差异较大 |
-| IP Hash / Hash | 根据 IP 或指定 Key 决定实例 | 会话粘性、固定映射 |
-
-默认情况下，Nginx 可以按 **轮询（Round Robin）** 分配请求；也支持 Least Connections、IP Hash，并可以通过 `weight` 影响服务器被选中的比例。
-
-因此负载均衡并不神秘，本质就是：
-
-> **upstream 定义候选服务器池，负载均衡算法负责从池子里挑一个。**
-
----
+连接超时、发送超时、读取超时分别约束不同阶段。代理缓冲可以让 Nginx 较快读完后端响应，再按客户端速度发送，避免慢客户端长期占用后端连接；流式响应则常需要关闭或调整缓冲。重试只适合尚未产生不可逆副作用的请求，否则可能造成重复下单。
 
 ## 6. 可靠性与扩展
 
-首先考虑后端实例故障。
+开源 Nginx 的 upstream 可以通过被动失败判断暂时避开异常实例；主动健康检查属于 NGINX Plus 等方案，或由外部发现系统配合。后端全部失败时，Nginx 返回 502、503 或 504，不能生成真实业务结果。超时、失败次数和重试条件需要与应用幂等性一起设计。
 
-假设：
+增加 Worker 可以利用单机多核，但不解决 Nginx 节点故障。生产入口通常部署多个 Nginx 实例，再由云负载均衡、VIP 或 DNS 提供入口高可用。配置、证书和静态文件需要在实例间同步；连接状态和本地缓存不会自动形成一致集群。
 
-```text
-Go A：正常
-Go B：故障
-Go C：正常
-```
+## 7. 设计取舍与容易混淆的概念
 
-Nginx 的反向代理具备 **被动健康检查（Passive Health Check）** 能力。
+事件驱动 Worker 用较少线程处理大量就绪连接，减少阻塞等待和线程切换；代价是磁盘、DNS、脚本或上游调用若阻塞不当，会影响同 Worker 的其他连接。代理缓冲隔离上下游速度，却增加内存、磁盘和首字节之后的延迟取舍。
 
-如果与某个 upstream 实例通信发生失败，可以根据失败次数和时间窗口暂时把它视为失败节点，并尽量避免继续把请求分配给它。相关行为可以通过 `max_fails`、`fail_timeout` 等参数控制。
-
-因此：
-
-```text
-            ┌─ Go A ✓
-Client → Nginx
-            ├─ Go B ✗
-            │
-            └─ Go C ✓
-```
-
-后端单个实例故障，不一定导致整个服务不可用。
-
-但需要特别注意：
-
-> **Nginx 能保护后端实例故障，不代表 Nginx 自己天然高可用。**
-
-如果只有：
-
-```text
-Client → Nginx → Backend
-          ↑
-        单节点
-```
-
-Nginx 自己挂掉，整个入口仍然不可用。
-
-因此真正的生产高可用通常需要：
-
-```text
-Client
-   ↓
-LB / VIP / DNS
-   ↓
-多个 Nginx
-   ↓
-多个 Backend
-```
-
-单机内部可以通过多个 Worker 利用多核 CPU；单台机器能力不足时，则需要增加 Nginx 实例实现水平扩展。
-
-还要记住：
-
-> **多个 Worker ≠ 多个 Nginx 节点。**
-
-Worker 主要解决一台机器内部的并行处理能力，而多个 Nginx 实例才能解决整台机器故障和更大的水平扩展问题。
-
----
-
-## 7. 为什么 Nginx 适合做这件事
-
-第一个原因是它采用**事件驱动的网络处理模型**。
-
-传统的“一连接一线程”模型，在连接数非常大时会带来更多线程、内存占用和上下文切换。
-
-Nginx Worker 更倾向于：
-
-> 一个 Worker 同时维护大量连接，哪个连接发生网络事件，就处理哪个连接。
-
-因此它特别适合反向代理、静态文件、长连接等 I/O 密集型工作。
-
-第二个原因是 **Master / Worker 分离**。
-
-Master 负责进程和配置管理，Worker 专心处理请求，使配置 reload 可以通过启动新的 Worker、逐步退出旧 Worker 的方式完成，而不是粗暴中断全部现有连接。
-
-第三个原因是：
-
-> **流量处理和业务逻辑解耦。**
-
-客户端只需要知道：
-
-```text
-api.example.com
-```
-
-至于后面到底有：
-
-```text
-Go A
-Go B
-Go C
-```
-
-甚至后端机器发生扩缩容，对客户端都可以保持透明。
-
-相应代价是：系统多了一层网络代理和配置；Nginx 配置错误可能影响大量流量；而且它只负责入口流量管理，不能解决应用内部的业务容错、数据一致性等问题。
-
----
-
-## 8. 容易混淆的概念
-
-| 概念 | 主要作用 | 关键区别 |
+| 概念 | 主要作用 | 最关键区别 |
 |---|---|---|
-| Reverse Proxy / Redirect | 代理访问 / 告诉客户端新地址 | Proxy 是 Nginx 去访问；Redirect 是客户端重新访问 |
-| Web Server / Reverse Proxy | 自己返回内容 / 转发给后端 | 静态文件常用前者，API 常用后者 |
-| server / location | 找站点 / 找 URI 规则 | 先 server，再 location |
-| proxy_pass / upstream | 指定代理目标 / 定义后端服务器组 | upstream 解决“有哪些候选后端” |
-| 多 Worker / 多 Nginx | 单机并行 / 水平扩展、高可用 | Worker 不能解决整台机器故障 |
+| 正向代理与反向代理 | 前者代表客户端，后者代表服务端集群 | 隐藏的对象不同 |
+| `location` 与 `upstream` | 前者匹配请求，后者组织后端 | 一个选规则，一个提供候选目标 |
+| `proxy_pass` 与负载均衡 | 前者执行转发，后者选择实例 | 负载均衡是转发前的一步 |
+| Nginx 与 Netty | 前者是成品代理服务器，后者是网络开发框架 | Netty 需要编写应用 |
+| 后端高可用与入口高可用 | 前者避免单个业务实例故障，后者避免 Nginx 单点 | 需要分别设计 |
 
----
+## 8. 后续可以了解什么
 
-## 9. 面试时需要掌握到什么程度
-
-如果面试官问：
-
-> **“你了解 Nginx 吗？”**
-
-只回答：
-
-> “Nginx 是一个反向代理服务器。”
-
-虽然没有错，但信息量偏少，只证明知道一个标签。
-
-对于普通 Go 后端岗位，更合适的回答是：
-
-> **“了解。Nginx 是一个高性能的 Web 服务器和反向代理服务器，在后端系统里经常作为统一流量入口。它可以通过 server 和 location 匹配请求，再通过 proxy_pass 转发给后端服务；如果后端有多个实例，可以通过 upstream 配合轮询、权重、最少连接等策略做负载均衡。另外它也可以直接提供静态资源、处理 HTTPS、限流等。Nginx 本身采用 Master/Worker 和事件驱动模型，因此比较适合处理大量并发网络连接。”**
-
-### 面试官通常会沿着这些方向继续追问
-
-> 什么叫反向代理？
-
-反向代理就是客户端只访问 Nginx，由 Nginx 代替客户端请求真正的后端服务，再把后端响应返回给客户端。
-
-> 代理和重定向有什么区别？
-
-代理是 Nginx 自己去访问目标服务，客户端通常不知道真实后端；重定向是 Nginx 告诉客户端一个新地址，由客户端重新发起请求。
-
-> Nginx 怎么提供静态文件？
-
-Nginx 可以根据 `root` 等配置，直接读取它能够访问的文件系统中的 HTML、CSS、JS、图片等文件并返回给客户端，不需要经过后端应用。
-
-> 多个后端怎么做负载均衡？
-
-可以通过 `upstream` 配置多个后端实例，再使用轮询、权重、最少连接、Hash 等策略选择一个实例转发请求。
-
-> 后端节点挂了怎么办？
-
-Nginx 可以根据连接或请求失败情况暂时避开异常节点，把流量继续转发给其他可用的后端实例。
-
-> 为什么 Nginx 并发性能比较好？
-
-核心原因是它采用 Master/Worker 进程模型和事件驱动的网络处理方式，一个 Worker 可以高效管理大量并发连接。
-
-> Nginx 自己挂了怎么办？
-
-单个 Nginx 仍然存在单点问题，生产环境通常会部署多个 Nginx 实例，再通过 VIP、云负载均衡或 DNS 等方式实现入口高可用。
-
-> 你们项目里怎么使用 Nginx？
-
-可以结合实际项目回答，例如让 Nginx 作为统一入口，负责 HTTPS、静态资源、API 反向代理以及多个 Go 服务实例之间的负载均衡。
-
-所以对于普通后端开发，第一阶段真正需要掌握的是：
-
-```text
-定义
- ↓
-反向代理
- ↓
-静态资源
- ↓
-server / location / proxy_pass
- ↓
-upstream
- ↓
-负载均衡
- ↓
-后端故障处理
- ↓
-Master / Worker + 事件驱动
-```
-
-如果这条链路能够顺畅讲下来，对“了解 Nginx 吗？”这个问题已经足够形成一个完整而可信的回答。
-
----
-
-## 10. 第一阶段记忆卡
-
-1. **Nginx 是高性能 Web Server 和 Reverse Proxy，后端系统中经常作为统一流量入口。**
-2. **反向代理是 Nginx 自己访问 Backend，再把结果返回客户端；不是让客户端重新访问 Backend。**
-3. **HTTP 请求通常先匹配 `server`，再匹配 `location`，最后决定如何处理。**
-4. **`proxy_pass` 负责转发请求，`upstream` 负责组织多个候选后端实例。**
-5. **静态 HTML、CSS、JS、图片可以由 Nginx 直接从文件系统读取并返回，不需要经过 Go 服务。**
-6. **多个 Backend 可以通过 Round Robin、Weight、Least Connections、Hash 等策略进行负载均衡。**
-7. **后端节点故障时 Nginx 可以暂时避开失败节点，但单个 Nginx 自己仍然可能是单点。**
-8. **Nginx 使用 Master/Worker 和事件驱动模型，核心优势是高效处理大量网络 I/O，而不是执行复杂业务逻辑。**
-
----
-
-## 11. 后续深入方向
-
-1. `location` 的精确匹配、前缀匹配和正则匹配优先级是什么？
-2. `proxy_pass` 带 URI 与不带 URI 时，转发路径有什么区别？
-3. Nginx Worker 的事件循环与 Linux `epoll` 是如何配合的？
-4. Keepalive 为什么能减少 Nginx 与 Backend 之间的连接开销？
-5. `proxy_buffering` 对性能和响应有什么影响？
-6. Nginx 如何实现限流和连接数限制？
-7. HTTPS/TLS 为什么经常在 Nginx 层终止？
-8. 多个 Nginx 实例在生产环境中如何实现真正的高可用？
+- `location` 的匹配优先级如何决定？
+- `proxy_pass` 带 URI 与不带 URI 时怎样改写路径？
+- Keepalive 和代理缓冲怎样影响连接与延迟？
+- 多个 Nginx 实例怎样实现配置同步和入口高可用？
 
 ## 资料来源
 
-- Nginx 官方 Beginner's Guide。
-- Nginx 官方 How nginx processes a request。
-- Nginx 官方 `ngx_http_proxy_module` 文档。
-- Nginx 官方 HTTP Load Balancing 文档。
+- [Nginx Beginner's Guide](https://nginx.org/en/docs/beginners_guide.html)
+- [How Nginx Processes a Request](https://nginx.org/en/docs/http/request_processing.html)
+- [Proxy Module](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)
+- [HTTP Load Balancing](https://nginx.org/en/docs/http/load_balancing.html)

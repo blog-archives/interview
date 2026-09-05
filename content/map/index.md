@@ -88,4 +88,4 @@ RabbitMQ 和 RocketMQ 不需要在 Kafka 之后立即全部深学。先用 Kafka
 4. 从第二批中根据岗位选择，不要求全部学习。
 5. 第三批只保持定位认知，出现实际需求后再深入。
 
-现有文档中已经包含 Redis、Kafka、Nginx、Elasticsearch、Prometheus、Grafana、etcd、ZooKeeper、Consul 和 Netty。后续新增文档时，优先补齐第一批缺少的 gRPC 与 OpenTelemetry，然后再按照第二批顺序扩展。
+现有文档中已经包含 Redis、Kafka、Nginx、Elasticsearch、Prometheus、Grafana、OpenTelemetry、etcd、ZooKeeper、Consul 和 Netty。后续新增文档时，优先补齐第一批缺少的 gRPC，然后再按照第二批顺序扩展。

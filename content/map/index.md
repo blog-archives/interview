@@ -43,7 +43,7 @@ order: 1
 | 15 | APISIX | 动态路由、插件、认证、限流、服务发现和网关控制面 |
 | 16 | [Loki](loki.md) | 标签索引、日志流、LogQL，以及它和 Elasticsearch 日志方案的差异 |
 | 17 | Jaeger 或 Tempo | Trace、Span、上下文传播、采样、存储和查询链路 |
-| 18 | Debezium | Snapshot、变更事件、Offset、Schema 变化和 CDC 恢复过程 |
+| 18 | [Debezium](cdc/debezium.md) | Snapshot、变更事件、Offset、Schema 变化和 CDC 恢复过程 |
 | 19 | MinIO | S3 对象模型、Bucket、Object、分片上传和签名 URL |
 | 20 | [MongoDB](mongodb.md) | Document、Collection、索引、副本集、分片和事务边界 |
 | 21 | [ClickHouse](clickhouse.md) | 列式存储、分区、排序键、MergeTree 和聚合查询 |
@@ -60,7 +60,7 @@ RabbitMQ 和 RocketMQ 不需要在 Kafka 之后立即全部深学。先用 Kafka
 | 消息与事件流 | Pulsar、NATS | 多租户消息平台、云原生低延迟通信或岗位明确使用 |
 | API Gateway | Kong、Traefik | 已理解 Nginx 和网关主流程，需要比较插件生态或运行方式 |
 | Service Mesh | Envoy、Istio | 需要 Sidecar、mTLS、服务间流量治理和统一遥测 |
-| CDC 与流处理 | Canal、Flink CDC | 使用 MySQL 生态或需要带计算能力的大规模数据同步 |
+| CDC 与流处理 | [Canal](cdc/canal.md)、[Flink CDC](cdc/flink-cdc.md) | 使用 MySQL 生态或需要带计算能力的大规模数据同步 |
 | OLAP | Doris、StarRocks | 已了解 ClickHouse，需要面向实时数仓做产品选型 |
 | 任务调度 | XXL-JOB、Quartz | Java 项目需要分布式任务调度或进程内定时任务 |
 | Java 微服务 | Dubbo、Sentinel、Seata | 目标岗位使用阿里系 Java 微服务技术栈 |
@@ -77,7 +77,7 @@ RabbitMQ 和 RocketMQ 不需要在 Kafka 之后立即全部深学。先用 Kafka
 | 指标与可视化 | Prometheus → Grafana | 再学习 OpenTelemetry 与统一可观测性 |
 | 注册、配置与协调 | etcd | Nacos、ZooKeeper、Consul 按岗位选择 |
 | 分布式追踪 | OpenTelemetry | Jaeger 或 Tempo |
-| CDC | Debezium | Canal 或 Flink CDC |
+| CDC | [Debezium](cdc/debezium.md) | [Canal](cdc/canal.md) 或 [Flink CDC](cdc/flink-cdc.md) |
 | OLAP | ClickHouse | Doris 或 StarRocks |
 
 ## 推荐执行顺序
@@ -88,4 +88,4 @@ RabbitMQ 和 RocketMQ 不需要在 Kafka 之后立即全部深学。先用 Kafka
 4. 从第二批中根据岗位选择，不要求全部学习。
 5. 第三批只保持定位认知，出现实际需求后再深入。
 
-现有文档中已经包含 Redis、Kafka、Nginx、Elasticsearch、ELK、Loki、Prometheus、Grafana、OpenTelemetry、etcd、ZooKeeper、Consul、MongoDB、ClickHouse 和 Netty。后续新增文档时，优先补齐第一批缺少的 gRPC，然后再按照第二批顺序扩展。
+现有文档中已经包含 Redis、Kafka、Nginx、Elasticsearch、ELK、Loki、Prometheus、Grafana、OpenTelemetry、etcd、ZooKeeper、Consul、Debezium、Flink CDC、Canal、MongoDB、ClickHouse 和 Netty。后续新增文档时，优先补齐第一批缺少的 gRPC，然后再按照第二批顺序扩展。
